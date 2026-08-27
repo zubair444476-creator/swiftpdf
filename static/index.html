@@ -118,6 +118,8 @@
   }
   .thumb-item:hover { border-color: var(--accent2); transform: scale(1.02); box-shadow: 0 4px 16px rgba(0,0,0,.5); }
   .thumb-item.selected { border-color: var(--accent); }
+  .thumb-item.remove-marked { border-color: var(--danger) !important; background: rgba(224,92,110,.08); }
+  .thumb-item.remove-marked .thumb-label { background: rgba(224,92,110,.7); }
 
   /* ✕ delete button on each thumb */
   .thumb-delete-btn {
@@ -648,6 +650,14 @@ async function loadThumbnails(file) {
   }
 }
 
+function applyRemoveStyle(div, isMarked) {
+  if (isMarked) {
+    div.classList.add("selected", "remove-marked");
+  } else {
+    div.classList.remove("selected", "remove-marked");
+  }
+}
+
 function renderThumbGrid() {
   const tool      = TOOLS[currentTool];
   const isExtract = tool && tool.thumbMode === "extract";
@@ -656,7 +666,8 @@ function renderThumbGrid() {
 
   thumbOrder.forEach((item, idx) => {
     const div = document.createElement("div");
-    div.className = "thumb-item" + (item.selected ? " selected" : "");
+    const isRemoveMode = tool && tool.thumbMode === "remove";
+    div.className = "thumb-item" + (item.selected && !isRemoveMode ? " selected" : "") + (item.selected && isRemoveMode ? " selected remove-marked" : "");
     div.dataset.idx = idx;
 
     // Page image
@@ -680,7 +691,8 @@ function renderThumbGrid() {
 
       // Click = toggle selection
       div.addEventListener("click", () => {
-        thumbOrder[idx].selected = !thumbOrder[idx].selected;
+        const i = parseInt(div.dataset.idx, 10);
+        thumbOrder[i].selected = !thumbOrder[i].selected;
         div.classList.toggle("selected");
         updateThumbCount();
       });
@@ -707,25 +719,19 @@ function renderThumbGrid() {
       });
 
     } else {
-      // REMOVE mode: ✕ button marks page for deletion
-      // Whole card click also toggles
-      div.addEventListener("click", e => {
-        if (e.target.closest(".thumb-delete-btn")) return; // handled by button
-        thumbOrder[idx].selected = !thumbOrder[idx].selected;
-        div.classList.toggle("selected");
+      // REMOVE mode: single click on the whole card (✕ button has pointer-events:none)
+      div.addEventListener("click", () => {
+        const i = parseInt(div.dataset.idx, 10);
+        thumbOrder[i].selected = !thumbOrder[i].selected;
+        applyRemoveStyle(div, thumbOrder[i].selected);
         updateThumbCount();
       });
 
       const delBtn = document.createElement("button");
       delBtn.className = "thumb-delete-btn";
       delBtn.title = "Mark for removal";
-      delBtn.textContent = "✕";
-      delBtn.addEventListener("click", e => {
-        e.stopPropagation();
-        thumbOrder[idx].selected = !thumbOrder[idx].selected;
-        div.classList.toggle("selected");
-        updateThumbCount();
-      });
+      delBtn.innerHTML = "&#x2715;";
+      delBtn.style.pointerEvents = "none"; // clicks fall through to card div
       div.appendChild(delBtn);
     }
 
