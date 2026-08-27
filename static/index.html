@@ -43,7 +43,7 @@
   }
   .hero {
     text-align: center;
-    margin-bottom: 40px;
+    margin-bottom: 36px;
   }
   .hero h1 {
     font-size: 34px;
@@ -52,6 +52,13 @@
   .hero p {
     color: var(--muted);
     font-size: 16px;
+  }
+  .section-title {
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 36px 0 14px;
   }
   .grid {
     display: grid;
@@ -84,6 +91,7 @@
     justify-content: center;
     padding: 20px;
     z-index: 50;
+    overflow-y: auto;
   }
   .modal-overlay.open { display: flex; }
   .modal {
@@ -93,6 +101,7 @@
     max-width: 520px;
     padding: 28px;
     position: relative;
+    margin: auto;
   }
   .modal h2 { margin-top: 0; }
   .modal .close-btn {
@@ -137,13 +146,15 @@
   }
   .options { margin-bottom: 16px; }
   .options label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 6px; }
-  select, input[type="number"] {
+  select, input[type="number"], input[type="text"], input[type="password"] {
     width: 100%;
     padding: 8px 10px;
     border-radius: 8px;
     border: 1px solid var(--border);
     font-size: 14px;
+    font-family: inherit;
   }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
   .primary-btn {
     width: 100%;
     background: var(--brand);
@@ -178,10 +189,11 @@
 <main>
   <div class="hero">
     <h1>Every PDF tool you need, in one place</h1>
-    <p>Merge, split, compress, rotate and convert your PDFs — fast and free.</p>
+    <p>Merge, split, organize, protect, watermark and convert your PDFs — fast and free.</p>
   </div>
 
-  <div class="grid" id="toolGrid">
+  <h2 class="section-title">Organize</h2>
+  <div class="grid">
     <div class="card" data-tool="merge">
       <div class="icon">🧩</div>
       <h3>Merge PDF</h3>
@@ -192,30 +204,111 @@
       <h3>Split PDF</h3>
       <p>Extract every page as its own PDF file.</p>
     </div>
-    <div class="card" data-tool="compress">
-      <div class="icon">📦</div>
-      <h3>Compress PDF</h3>
-      <p>Shrink file size while keeping good quality.</p>
+    <div class="card" data-tool="remove-pages">
+      <div class="icon">🗑️</div>
+      <h3>Remove Pages</h3>
+      <p>Delete specific pages from a PDF.</p>
+    </div>
+    <div class="card" data-tool="extract-pages">
+      <div class="icon">🔀</div>
+      <h3>Organize / Extract Pages</h3>
+      <p>Keep, reorder or extract chosen pages.</p>
     </div>
     <div class="card" data-tool="rotate">
       <div class="icon">🔄</div>
       <h3>Rotate PDF</h3>
       <p>Fix sideways or upside-down pages.</p>
     </div>
-    <div class="card" data-tool="images-to-pdf">
+    <div class="card" data-tool="crop">
       <div class="icon">🖼️</div>
-      <h3>Images to PDF</h3>
-      <p>Turn JPG or PNG images into one PDF.</p>
+      <h3>Crop PDF</h3>
+      <p>Trim margins evenly from every page.</p>
     </div>
+  </div>
+
+  <h2 class="section-title">Edit</h2>
+  <div class="grid">
+    <div class="card" data-tool="add-page-numbers">
+      <div class="icon">🔢</div>
+      <h3>Add Page Numbers</h3>
+      <p>Stamp page numbers on every page.</p>
+    </div>
+    <div class="card" data-tool="watermark">
+      <div class="icon">💧</div>
+      <h3>Watermark PDF</h3>
+      <p>Add a diagonal text watermark.</p>
+    </div>
+    <div class="card" data-tool="compress">
+      <div class="icon">📦</div>
+      <h3>Compress PDF</h3>
+      <p>Shrink file size while keeping good quality.</p>
+    </div>
+  </div>
+
+  <h2 class="section-title">Security</h2>
+  <div class="grid">
+    <div class="card" data-tool="protect">
+      <div class="icon">🔒</div>
+      <h3>Protect PDF</h3>
+      <p>Add a password to lock your PDF.</p>
+    </div>
+    <div class="card" data-tool="unlock">
+      <div class="icon">🔓</div>
+      <h3>Unlock PDF</h3>
+      <p>Remove a known password from a PDF.</p>
+    </div>
+  </div>
+
+  <h2 class="section-title">Convert from PDF</h2>
+  <div class="grid">
     <div class="card" data-tool="pdf-to-images">
       <div class="icon">📸</div>
-      <h3>PDF to Images</h3>
-      <p>Export each page as a high-res PNG.</p>
+      <h3>PDF to JPG/PNG</h3>
+      <p>Export each page as a high-res image.</p>
     </div>
     <div class="card" data-tool="pdf-to-text">
       <div class="icon">📄</div>
       <h3>PDF to Text</h3>
       <p>Extract all readable text from a PDF.</p>
+    </div>
+    <div class="card" data-tool="pdf-to-word">
+      <div class="icon">📝</div>
+      <h3>PDF to Word</h3>
+      <p>Convert a PDF into an editable .docx file.</p>
+    </div>
+    <div class="card" data-tool="pdf-to-pptx">
+      <div class="icon">📊</div>
+      <h3>PDF to PowerPoint</h3>
+      <p>Turn each PDF page into a slide.</p>
+    </div>
+    <div class="card" data-tool="pdf-to-excel">
+      <div class="icon">📈</div>
+      <h3>PDF to Excel</h3>
+      <p>Pull tables (or text) into a .xlsx file.</p>
+    </div>
+  </div>
+
+  <h2 class="section-title">Convert to PDF</h2>
+  <div class="grid">
+    <div class="card" data-tool="images-to-pdf">
+      <div class="icon">🖼️</div>
+      <h3>Images to PDF</h3>
+      <p>Turn JPG or PNG images into one PDF.</p>
+    </div>
+    <div class="card" data-tool="word-to-pdf">
+      <div class="icon">📄</div>
+      <h3>Word to PDF</h3>
+      <p>Convert a .docx file into a PDF.</p>
+    </div>
+    <div class="card" data-tool="pptx-to-pdf">
+      <div class="icon">📄</div>
+      <h3>PowerPoint to PDF</h3>
+      <p>Convert a .pptx file into a PDF.</p>
+    </div>
+    <div class="card" data-tool="excel-to-pdf">
+      <div class="icon">📄</div>
+      <h3>Excel to PDF</h3>
+      <p>Convert a .xlsx file into a PDF.</p>
     </div>
   </div>
 </main>
@@ -251,6 +344,8 @@
       </select>
     </div>
 
+    <div id="genericOptions"></div>
+
     <button class="primary-btn" id="runBtn" disabled>Choose files to continue</button>
     <div class="status" id="statusMsg"></div>
   </div>
@@ -276,15 +371,29 @@ const TOOLS = {
     fieldName: "files",
     cta: "Split PDF"
   },
-  "compress": {
-    title: "Compress PDF",
-    endpoint: "/api/compress",
+  "remove-pages": {
+    title: "Remove Pages",
+    endpoint: "/api/remove-pages",
     accept: ".pdf",
     multiple: false,
     minFiles: 1,
     fieldName: "files",
-    cta: "Compress PDF",
-    showCompressOptions: true
+    cta: "Remove Pages",
+    fields: [
+      { id: "pages", label: "Pages to remove", type: "text", placeholder: "e.g. 2,4-5", hint: "Comma-separated page numbers or ranges, 1-indexed." }
+    ]
+  },
+  "extract-pages": {
+    title: "Organize / Extract Pages",
+    endpoint: "/api/extract-pages",
+    accept: ".pdf",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Build New PDF",
+    fields: [
+      { id: "pages", label: "Pages to keep, in order", type: "text", placeholder: "e.g. 3,1,2 or 1-5", hint: "List pages in the order you want them to appear in the new PDF." }
+    ]
   },
   "rotate": {
     title: "Rotate PDF",
@@ -296,6 +405,83 @@ const TOOLS = {
     cta: "Rotate PDF",
     showRotateOptions: true
   },
+  "crop": {
+    title: "Crop PDF",
+    endpoint: "/api/crop",
+    accept: ".pdf",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Crop PDF",
+    fields: [
+      { id: "margin", label: "Margin to trim (points)", type: "number", placeholder: "36", default: "36", hint: "72 points = 1 inch. Applied evenly on all sides." }
+    ]
+  },
+  "add-page-numbers": {
+    title: "Add Page Numbers",
+    endpoint: "/api/add-page-numbers",
+    accept: ".pdf",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Add Page Numbers",
+    fields: [
+      { id: "start", label: "Start numbering at", type: "number", default: "1" },
+      { id: "position", label: "Position", type: "select", options: [
+          { value: "bottom-center", label: "Bottom center" },
+          { value: "bottom-left", label: "Bottom left" },
+          { value: "bottom-right", label: "Bottom right" },
+          { value: "top-center", label: "Top center" }
+        ] }
+    ]
+  },
+  "watermark": {
+    title: "Watermark PDF",
+    endpoint: "/api/watermark",
+    accept: ".pdf",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Add Watermark",
+    fields: [
+      { id: "text", label: "Watermark text", type: "text", default: "CONFIDENTIAL" },
+      { id: "opacity", label: "Opacity (0.05 – 1)", type: "number", default: "0.3" }
+    ]
+  },
+  "compress": {
+    title: "Compress PDF",
+    endpoint: "/api/compress",
+    accept: ".pdf",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Compress PDF",
+    showCompressOptions: true
+  },
+  "protect": {
+    title: "Protect PDF",
+    endpoint: "/api/protect",
+    accept: ".pdf",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Protect PDF",
+    fields: [
+      { id: "password", label: "Set a password", type: "password", placeholder: "Enter a password" }
+    ]
+  },
+  "unlock": {
+    title: "Unlock PDF",
+    endpoint: "/api/unlock",
+    accept: ".pdf",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Unlock PDF",
+    fields: [
+      { id: "password", label: "Current password", type: "password", placeholder: "Enter the PDF's password" }
+    ]
+  },
   "images-to-pdf": {
     title: "Images to PDF",
     endpoint: "/api/images-to-pdf",
@@ -306,7 +492,7 @@ const TOOLS = {
     cta: "Convert to PDF"
   },
   "pdf-to-images": {
-    title: "PDF to Images",
+    title: "PDF to JPG/PNG",
     endpoint: "/api/pdf-to-images",
     accept: ".pdf",
     multiple: false,
@@ -322,6 +508,60 @@ const TOOLS = {
     minFiles: 1,
     fieldName: "files",
     cta: "Extract Text"
+  },
+  "pdf-to-word": {
+    title: "PDF to Word",
+    endpoint: "/api/pdf-to-word",
+    accept: ".pdf",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Convert to Word"
+  },
+  "pdf-to-pptx": {
+    title: "PDF to PowerPoint",
+    endpoint: "/api/pdf-to-pptx",
+    accept: ".pdf",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Convert to PowerPoint"
+  },
+  "pdf-to-excel": {
+    title: "PDF to Excel",
+    endpoint: "/api/pdf-to-excel",
+    accept: ".pdf",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Convert to Excel"
+  },
+  "word-to-pdf": {
+    title: "Word to PDF",
+    endpoint: "/api/word-to-pdf",
+    accept: ".docx",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Convert to PDF"
+  },
+  "pptx-to-pdf": {
+    title: "PowerPoint to PDF",
+    endpoint: "/api/pptx-to-pdf",
+    accept: ".pptx",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Convert to PDF"
+  },
+  "excel-to-pdf": {
+    title: "Excel to PDF",
+    endpoint: "/api/excel-to-pdf",
+    accept: ".xlsx",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Convert to PDF"
   }
 };
 
@@ -337,6 +577,7 @@ const runBtn = document.getElementById("runBtn");
 const statusMsg = document.getElementById("statusMsg");
 const rotateOptions = document.getElementById("rotateOptions");
 const compressOptions = document.getElementById("compressOptions");
+const genericOptions = document.getElementById("genericOptions");
 
 document.querySelectorAll(".card").forEach(card => {
   card.addEventListener("click", () => openModal(card.dataset.tool));
@@ -362,6 +603,46 @@ function openModal(toolKey) {
 
   rotateOptions.style.display = currentTool.showRotateOptions ? "block" : "none";
   compressOptions.style.display = currentTool.showCompressOptions ? "block" : "none";
+
+  genericOptions.innerHTML = "";
+  if (currentTool.fields) {
+    currentTool.fields.forEach(field => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "options";
+
+      const label = document.createElement("label");
+      label.setAttribute("for", "field_" + field.id);
+      label.textContent = field.label;
+      wrapper.appendChild(label);
+
+      let input;
+      if (field.type === "select") {
+        input = document.createElement("select");
+        field.options.forEach(opt => {
+          const optionEl = document.createElement("option");
+          optionEl.value = opt.value;
+          optionEl.textContent = opt.label;
+          input.appendChild(optionEl);
+        });
+      } else {
+        input = document.createElement("input");
+        input.type = field.type;
+        if (field.placeholder) input.placeholder = field.placeholder;
+        if (field.default !== undefined) input.value = field.default;
+      }
+      input.id = "field_" + field.id;
+      wrapper.appendChild(input);
+
+      if (field.hint) {
+        const hint = document.createElement("div");
+        hint.className = "hint";
+        hint.textContent = field.hint;
+        wrapper.appendChild(hint);
+      }
+
+      genericOptions.appendChild(wrapper);
+    });
+  }
 
   modalOverlay.classList.add("open");
 }
@@ -431,6 +712,12 @@ runBtn.addEventListener("click", async () => {
   }
   if (currentTool.showCompressOptions) {
     formData.append("quality", document.getElementById("qualitySelect").value);
+  }
+  if (currentTool.fields) {
+    currentTool.fields.forEach(field => {
+      const el = document.getElementById("field_" + field.id);
+      if (el) formData.append(field.id, el.value);
+    });
   }
 
   try {
