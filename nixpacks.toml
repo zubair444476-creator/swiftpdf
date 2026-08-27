@@ -1,9 +1,0 @@
-[phases.setup]
-aptPkgs = [
-  "tesseract-ocr",      # Tesseract OCR engine
-  "tesseract-ocr-eng",  # English language pack
-  "tesseract-ocr-ara",  # Arabic language pack
-]
-
-[phases.install]
-cmds = ["pip install -r requirements.txt"]
