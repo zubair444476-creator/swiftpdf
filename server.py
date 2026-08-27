@@ -9,6 +9,21 @@ from werkzeug.utils import secure_filename
 import fitz  # pymupdf
 from PIL import Image
 
+from docx import Document
+from docx.shared import Pt
+
+from pptx import Presentation
+from pptx.util import Emu
+
+from openpyxl import Workbook, load_workbook
+
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.pdfgen import canvas as pdf_canvas
+
 app = Flask(__name__, static_folder="static", static_url_path="")
 
 MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50 MB
@@ -35,6 +50,32 @@ def send_bytes(data: bytes, filename: str, mimetype: str):
         as_attachment=True,
         download_name=filename,
     )
+
+
+def parse_page_spec(spec: str, page_count: int):
+    """Parse a 1-indexed page spec like '1,3,5-7' into a 0-indexed list,
+    preserving the order given (so it can also be used to reorder pages)."""
+    result = []
+    spec = (spec or "").strip()
+    if not spec:
+        return list(range(page_count))
+
+    for chunk in spec.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        if "-" in chunk:
+            start_s, end_s = chunk.split("-", 1)
+            start, end = int(start_s), int(end_s)
+            step = 1 if end >= start else -1
+            for p in range(start, end + step, step):
+                if 1 <= p <= page_count:
+                    result.append(p - 1)
+        else:
+            p = int(chunk)
+            if 1 <= p <= page_count:
+                result.append(p - 1)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +292,534 @@ def pdf_to_text():
 
     full_text = "\n\n".join(text_parts).encode("utf-8")
     return send_bytes(full_text, f"{base_name}.txt", "text/plain")
+
+
+# ---------------------------------------------------------------------------
+# PDF -> Word (.docx)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/pdf-to-word", methods=["POST"])
+def pdf_to_word():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a PDF file to convert."}), 400
+
+    src = files[0]
+    data = src.read()
+    base_name = os.path.splitext(secure_filename(src.filename))[0] or "document"
+
+    document = Document()
+
+    with fitz.open(stream=data, filetype="pdf") as doc:
+        for page_index, page in enumerate(doc):
+            blocks = page.get_text("blocks")
+            # Sort blocks in natural reading order: top-to-bottom, left-to-right
+            blocks.sort(key=lambda b: (round(b[1], 1), round(b[0], 1)))
+
+            for b in blocks:
+                text = b[4].strip() if len(b) > 4 else ""
+                if not text:
+                    continue
+                for line in text.split("\n"):
+                    line = line.strip()
+                    if line:
+                        para = document.add_paragraph(line)
+                        para.style.font.size = Pt(11)
+
+            if page_index < len(doc) - 1:
+                document.add_page_break()
+
+    buf = io.BytesIO()
+    document.save(buf)
+    buf.seek(0)
+
+    return send_bytes(
+        buf.getvalue(),
+        f"{base_name}.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+# ---------------------------------------------------------------------------
+# PDF -> PowerPoint (.pptx) - each page becomes a full-slide image
+# ---------------------------------------------------------------------------
+
+@app.route("/api/pdf-to-pptx", methods=["POST"])
+def pdf_to_pptx():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a PDF file to convert."}), 400
+
+    src = files[0]
+    data = src.read()
+    base_name = os.path.splitext(secure_filename(src.filename))[0] or "presentation"
+
+    zoom = 2.0
+    mat = fitz.Matrix(zoom, zoom)
+
+    prs = Presentation()
+
+    with fitz.open(stream=data, filetype="pdf") as doc:
+        if len(doc) == 0:
+            return jsonify({"error": "The PDF has no pages."}), 400
+
+        # Size the slides to match the first page's aspect ratio
+        first_rect = doc[0].rect
+        prs.slide_width = Emu(int(first_rect.width * 12700))
+        prs.slide_height = Emu(int(first_rect.height * 12700))
+        blank_layout = prs.slide_layouts[6]
+
+        for page in doc:
+            pix = page.get_pixmap(matrix=mat)
+            img_bytes = pix.tobytes("png")
+
+            slide = prs.slides.add_slide(blank_layout)
+            slide.shapes.add_picture(
+                io.BytesIO(img_bytes),
+                Emu(0),
+                Emu(0),
+                width=prs.slide_width,
+                height=prs.slide_height,
+            )
+
+    buf = io.BytesIO()
+    prs.save(buf)
+    buf.seek(0)
+
+    return send_bytes(
+        buf.getvalue(),
+        f"{base_name}.pptx",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
+
+
+# ---------------------------------------------------------------------------
+# PDF -> Excel (.xlsx) - extracts detected tables, falls back to raw text lines
+# ---------------------------------------------------------------------------
+
+@app.route("/api/pdf-to-excel", methods=["POST"])
+def pdf_to_excel():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a PDF file to convert."}), 400
+
+    src = files[0]
+    data = src.read()
+    base_name = os.path.splitext(secure_filename(src.filename))[0] or "spreadsheet"
+
+    wb = Workbook()
+    wb.remove(wb.active)  # start with no sheets, add one per page below
+
+    with fitz.open(stream=data, filetype="pdf") as doc:
+        for page_index, page in enumerate(doc):
+            sheet_name = f"Page {page_index + 1}"[:31]
+            ws = wb.create_sheet(title=sheet_name)
+
+            wrote_table = False
+            try:
+                tables = page.find_tables()
+                if tables and tables.tables:
+                    row_cursor = 1
+                    for table in tables.tables:
+                        extracted = table.extract()
+                        for row in extracted:
+                            for col_index, cell_value in enumerate(row, start=1):
+                                ws.cell(
+                                    row=row_cursor,
+                                    column=col_index,
+                                    value=cell_value if cell_value is not None else "",
+                                )
+                            row_cursor += 1
+                        row_cursor += 1  # blank row between tables
+                        wrote_table = True
+            except Exception:
+                wrote_table = False
+
+            if not wrote_table:
+                # Fall back to dumping each line of text into column A
+                text = page.get_text()
+                for row_index, line in enumerate(text.split("\n"), start=1):
+                    if line.strip():
+                        ws.cell(row=row_index, column=1, value=line)
+
+    if not wb.sheetnames:
+        wb.create_sheet(title="Sheet1")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    return send_bytes(
+        buf.getvalue(),
+        f"{base_name}.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Remove pages
+# ---------------------------------------------------------------------------
+
+@app.route("/api/remove-pages", methods=["POST"])
+def remove_pages():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a PDF file."}), 400
+    pages_spec = request.form.get("pages", "")
+    if not pages_spec.strip():
+        return jsonify({"error": "Tell me which pages to remove, e.g. 2,4-5"}), 400
+
+    src = files[0]
+    data = src.read()
+
+    with fitz.open(stream=data, filetype="pdf") as doc:
+        to_remove = sorted(set(parse_page_spec(pages_spec, len(doc))), reverse=True)
+        if not to_remove:
+            return jsonify({"error": "No valid page numbers found in that range."}), 400
+        for idx in to_remove:
+            doc.delete_page(idx)
+        if len(doc) == 0:
+            return jsonify({"error": "That would remove every page. Leave at least one."}), 400
+        out_bytes = doc.tobytes()
+
+    return send_bytes(out_bytes, "pages_removed.pdf", "application/pdf")
+
+
+# ---------------------------------------------------------------------------
+# Extract / reorder pages ("Organize PDF")
+# ---------------------------------------------------------------------------
+
+@app.route("/api/extract-pages", methods=["POST"])
+def extract_pages():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a PDF file."}), 400
+    pages_spec = request.form.get("pages", "")
+    if not pages_spec.strip():
+        return jsonify({"error": "Tell me which pages to keep and in what order, e.g. 3,1,2"}), 400
+
+    src = files[0]
+    data = src.read()
+
+    with fitz.open(stream=data, filetype="pdf") as doc:
+        page_order = parse_page_spec(pages_spec, len(doc))
+        if not page_order:
+            return jsonify({"error": "No valid page numbers found in that range."}), 400
+
+        new_doc = fitz.open()
+        for idx in page_order:
+            new_doc.insert_pdf(doc, from_page=idx, to_page=idx)
+        out_bytes = new_doc.tobytes()
+        new_doc.close()
+
+    return send_bytes(out_bytes, "organized.pdf", "application/pdf")
+
+
+# ---------------------------------------------------------------------------
+# Add page numbers
+# ---------------------------------------------------------------------------
+
+@app.route("/api/add-page-numbers", methods=["POST"])
+def add_page_numbers():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a PDF file."}), 400
+
+    try:
+        start = int(request.form.get("start", 1))
+    except ValueError:
+        start = 1
+    position = request.form.get("position", "bottom-center")
+
+    src = files[0]
+    data = src.read()
+
+    with fitz.open(stream=data, filetype="pdf") as doc:
+        for i, page in enumerate(doc):
+            label = str(start + i)
+            rect = page.rect
+            margin = 24
+            if position == "bottom-left":
+                point = fitz.Point(margin, rect.height - margin)
+            elif position == "bottom-right":
+                point = fitz.Point(rect.width - margin - 20, rect.height - margin)
+            elif position == "top-center":
+                point = fitz.Point(rect.width / 2 - 8, margin)
+            else:  # bottom-center
+                point = fitz.Point(rect.width / 2 - 8, rect.height - margin)
+
+            page.insert_text(point, label, fontsize=11, color=(0, 0, 0))
+
+        out_bytes = doc.tobytes()
+
+    return send_bytes(out_bytes, "numbered.pdf", "application/pdf")
+
+
+# ---------------------------------------------------------------------------
+# Watermark PDF (diagonal repeated text)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/watermark", methods=["POST"])
+def watermark_pdf():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a PDF file."}), 400
+
+    text = request.form.get("text", "CONFIDENTIAL").strip() or "CONFIDENTIAL"
+    try:
+        opacity = float(request.form.get("opacity", 0.3))
+    except ValueError:
+        opacity = 0.3
+    opacity = max(0.05, min(opacity, 1.0))
+
+    src = files[0]
+    data = src.read()
+
+    with fitz.open(stream=data, filetype="pdf") as doc:
+        for page in doc:
+            rect = page.rect
+            page.insert_text(
+                fitz.Point(rect.width * 0.15, rect.height * 0.55),
+                text,
+                fontsize=max(24, int(rect.width / 12)),
+                rotate=45,
+                color=(0.6, 0.6, 0.6),
+                fill_opacity=opacity,
+                overlay=True,
+            )
+        out_bytes = doc.tobytes()
+
+    return send_bytes(out_bytes, "watermarked.pdf", "application/pdf")
+
+
+# ---------------------------------------------------------------------------
+# Protect PDF (add a password)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/protect", methods=["POST"])
+def protect_pdf():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a PDF file."}), 400
+    password = request.form.get("password", "").strip()
+    if not password:
+        return jsonify({"error": "Enter a password to protect the PDF with."}), 400
+
+    src = files[0]
+    data = src.read()
+
+    with fitz.open(stream=data, filetype="pdf") as doc:
+        out_bytes = doc.tobytes(
+            encryption=fitz.PDF_ENCRYPT_AES_256,
+            owner_pw=password,
+            user_pw=password,
+            permissions=int(
+                fitz.PDF_PERM_PRINT
+                | fitz.PDF_PERM_COPY
+                | fitz.PDF_PERM_ANNOTATE
+            ),
+        )
+
+    return send_bytes(out_bytes, "protected.pdf", "application/pdf")
+
+
+# ---------------------------------------------------------------------------
+# Unlock PDF (remove a known password)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/unlock", methods=["POST"])
+def unlock_pdf():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a PDF file."}), 400
+    password = request.form.get("password", "").strip()
+
+    src = files[0]
+    data = src.read()
+
+    doc = fitz.open(stream=data, filetype="pdf")
+    try:
+        if doc.needs_pass:
+            if not password:
+                return jsonify({"error": "This PDF is password-protected. Enter the password."}), 400
+            if not doc.authenticate(password):
+                return jsonify({"error": "That password didn't work."}), 400
+        out_bytes = doc.tobytes()
+    finally:
+        doc.close()
+
+    return send_bytes(out_bytes, "unlocked.pdf", "application/pdf")
+
+
+# ---------------------------------------------------------------------------
+# Crop PDF (trim a margin off every page)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/crop", methods=["POST"])
+def crop_pdf():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a PDF file."}), 400
+
+    try:
+        margin = float(request.form.get("margin", 36))
+    except ValueError:
+        margin = 36
+    margin = max(0, margin)
+
+    src = files[0]
+    data = src.read()
+
+    with fitz.open(stream=data, filetype="pdf") as doc:
+        for page in doc:
+            rect = page.rect
+            new_rect = fitz.Rect(
+                rect.x0 + margin,
+                rect.y0 + margin,
+                rect.x1 - margin,
+                rect.y1 - margin,
+            )
+            if new_rect.width > 10 and new_rect.height > 10:
+                page.set_cropbox(new_rect)
+        out_bytes = doc.tobytes()
+
+    return send_bytes(out_bytes, "cropped.pdf", "application/pdf")
+
+
+# ---------------------------------------------------------------------------
+# Word (.docx) -> PDF  (text-based conversion, not full layout fidelity)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/word-to-pdf", methods=["POST"])
+def word_to_pdf():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a .docx file."}), 400
+
+    src = files[0]
+    base_name = os.path.splitext(secure_filename(src.filename))[0] or "document"
+    document = Document(src.stream)
+
+    buf = io.BytesIO()
+    pdf_doc = SimpleDocTemplate(buf, pagesize=letter)
+    styles = getSampleStyleSheet()
+    flowables = []
+
+    for para in document.paragraphs:
+        text = para.text.strip()
+        if not text:
+            flowables.append(Spacer(1, 10))
+            continue
+        style_name = "Heading2" if para.style and "Heading" in (para.style.name or "") else "Normal"
+        flowables.append(Paragraph(text.replace("&", "&amp;").replace("<", "&lt;"), styles[style_name]))
+        flowables.append(Spacer(1, 6))
+
+    if not flowables:
+        flowables = [Paragraph("(No text content found in this document.)", styles["Normal"])]
+
+    pdf_doc.build(flowables)
+    buf.seek(0)
+
+    return send_bytes(buf.getvalue(), f"{base_name}.pdf", "application/pdf")
+
+
+# ---------------------------------------------------------------------------
+# PowerPoint (.pptx) -> PDF (one page per slide, text content only)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/pptx-to-pdf", methods=["POST"])
+def pptx_to_pdf():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a .pptx file."}), 400
+
+    src = files[0]
+    base_name = os.path.splitext(secure_filename(src.filename))[0] or "presentation"
+    prs = Presentation(src.stream)
+
+    buf = io.BytesIO()
+    c = pdf_canvas.Canvas(buf, pagesize=letter)
+    width, height = letter
+
+    for slide in prs.slides:
+        y = height - 60
+        c.setFont("Helvetica-Bold", 16)
+        texts = []
+        for shape in slide.shapes:
+            if shape.has_text_frame and shape.text_frame.text.strip():
+                texts.append(shape.text_frame.text.strip())
+
+        if texts:
+            c.drawString(50, y, texts[0][:90])
+            y -= 40
+            c.setFont("Helvetica", 12)
+            for block in texts[1:]:
+                for line in block.split("\n"):
+                    if y < 50:
+                        c.showPage()
+                        y = height - 60
+                        c.setFont("Helvetica", 12)
+                    c.drawString(60, y, line[:100])
+                    y -= 18
+        else:
+            c.setFont("Helvetica", 12)
+            c.drawString(50, y, "(No text content on this slide.)")
+
+        c.showPage()
+
+    c.save()
+    buf.seek(0)
+
+    return send_bytes(buf.getvalue(), f"{base_name}.pdf", "application/pdf")
+
+
+# ---------------------------------------------------------------------------
+# Excel (.xlsx) -> PDF (one table per sheet)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/excel-to-pdf", methods=["POST"])
+def excel_to_pdf():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a .xlsx file."}), 400
+
+    src = files[0]
+    base_name = os.path.splitext(secure_filename(src.filename))[0] or "spreadsheet"
+    wb = load_workbook(src.stream, data_only=True)
+
+    buf = io.BytesIO()
+    pdf_doc = SimpleDocTemplate(buf, pagesize=letter)
+    styles = getSampleStyleSheet()
+    flowables = []
+
+    for sheet in wb.worksheets:
+        flowables.append(Paragraph(sheet.title, styles["Heading2"]))
+        flowables.append(Spacer(1, 8))
+
+        rows = []
+        for row in sheet.iter_rows(values_only=True):
+            rows.append(["" if v is None else str(v) for v in row])
+
+        if rows:
+            # Cap columns so wide sheets don't overflow the page unreadably
+            max_cols = 10
+            rows = [r[:max_cols] for r in rows]
+            table = Table(rows, repeatRows=1)
+            table.setStyle(TableStyle([
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ]))
+            flowables.append(table)
+        else:
+            flowables.append(Paragraph("(Empty sheet)", styles["Normal"]))
+
+        flowables.append(Spacer(1, 20))
+
+    pdf_doc.build(flowables)
+    buf.seek(0)
+
+    return send_bytes(buf.getvalue(), f"{base_name}.pdf", "application/pdf")
 
 
 # ---------------------------------------------------------------------------
