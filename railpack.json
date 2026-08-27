@@ -2,6 +2,8 @@
   "aptPackages": [
     "tesseract-ocr",
     "tesseract-ocr-eng",
-    "tesseract-ocr-ara"
+    "tesseract-ocr-ara",
+    "libtesseract-dev",
+    "libleptonica-dev"
   ]
 }
