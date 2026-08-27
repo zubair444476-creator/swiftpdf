@@ -329,7 +329,7 @@ def pdf_to_text():
 
 
 # ---------------------------------------------------------------------------
-# PDF -> Word (.docx)  — adaptive conversion: works for ANY PDF layout
+# PDF -> Word (.docx)  — rich conversion preserving headings, tables, formatting
 # ---------------------------------------------------------------------------
 
 def _pdf_rgb(color_int):
@@ -367,59 +367,36 @@ def _set_table_borders(table, color="AAAAAA", sz="4"):
     tblPr.append(borders)
 
 
-def _detect_col_boundaries(text_blocks, page_width):
+def _detect_col_boundaries(text_blocks):
     """
-    Adaptively detect column X-boundaries from the actual text block positions
-    in a table area.  Works for any number of columns in any PDF.
-
-    Returns a sorted list of X thresholds such that:
-      col 0 : x0 < thresholds[0]
-      col 1 : thresholds[0] <= x0 < thresholds[1]
-      ...
-      col N : x0 >= thresholds[N-1]
+    Adaptively detect column X-boundaries from the actual text block left-edges.
+    A new cluster starts whenever there is a gap > 15 pt between positions.
+    Returns a sorted list of X midpoint thresholds between clusters.
     """
     if not text_blocks:
         return []
-
-    # Collect every distinct left-edge X position (rounded to 1 pt)
     x_lefts = sorted(set(round(b["bbox"][0]) for b in text_blocks))
     if len(x_lefts) <= 1:
-        return []  # all text in one column
-
-    # Cluster the X-positions: a new cluster starts whenever there is a gap
-    # of more than ~15 pt between consecutive positions.
+        return []
     GAP = 15
     clusters = [[x_lefts[0]]]
     for x in x_lefts[1:]:
         if x - clusters[-1][-1] > GAP:
             clusters.append([])
         clusters[-1].append(x)
-
     if len(clusters) <= 1:
         return []
-
-    # The boundary between col[i] and col[i+1] is the midpoint between the
-    # last X of cluster[i] and the first X of cluster[i+1].
-    boundaries = []
-    for i in range(len(clusters) - 1):
-        mid = (clusters[i][-1] + clusters[i + 1][0]) / 2.0
-        boundaries.append(mid)
-
-    return boundaries
+    # Boundary = midpoint between last of cluster[i] and first of cluster[i+1]
+    return [(clusters[i][-1] + clusters[i + 1][0]) / 2.0
+            for i in range(len(clusters) - 1)]
 
 
 def _extract_table_rows_adaptive(page, y_min, y_max, table_bbox, is_first_table_on_doc):
     """
-    Extract table rows from a region of a page using adaptive column detection.
-    Works for any table in any PDF — column boundaries are detected from the
-    actual text positions rather than hard-coded pixel offsets.
-
-    Returns a list of tuples:
-        ("header", col0, col1, ..., colN)   — the first row if it looks like a header
-        ("data",   col0, col1, ..., colN)   — every other row
+    Extract table rows using adaptive column detection — works for any PDF table,
+    any number of columns, without hard-coded pixel offsets.
     """
     blocks = page.get_text("dict")["blocks"]
-    # Only text blocks within the table bounding box (with 4 pt padding)
     text_blocks = [
         b for b in blocks
         if b.get("type") == 0
@@ -431,10 +408,8 @@ def _extract_table_rows_adaptive(page, y_min, y_max, table_bbox, is_first_table_
         return []
 
     text_blocks.sort(key=lambda b: (round(b["bbox"][1] / 4) * 4, b["bbox"][0]))
-
-    # Detect column boundaries adaptively
-    boundaries = _detect_col_boundaries(text_blocks, page.rect.width)
-    ncols = len(boundaries) + 1  # number of columns
+    boundaries = _detect_col_boundaries(text_blocks)
+    ncols = len(boundaries) + 1
 
     def col_index(x0):
         for i, bnd in enumerate(boundaries):
@@ -442,7 +417,6 @@ def _extract_table_rows_adaptive(page, y_min, y_max, table_bbox, is_first_table_
                 return i
         return ncols - 1
 
-    # Group blocks by Y-row (blocks within 4 pt of each other = same row)
     y_groups = {}
     for b in text_blocks:
         y_key = round(b["bbox"][1] / 4) * 4
@@ -450,10 +424,8 @@ def _extract_table_rows_adaptive(page, y_min, y_max, table_bbox, is_first_table_
 
     rows = []
     for yi, y_key in enumerate(sorted(y_groups.keys())):
-        group = y_groups[y_key]
         cols_text = [""] * ncols
-
-        for b in group:
+        for b in y_groups[y_key]:
             x0 = b["bbox"][0]
             ci = col_index(x0)
             for line in b["lines"]:
@@ -463,18 +435,34 @@ def _extract_table_rows_adaptive(page, y_min, y_max, table_bbox, is_first_table_
                 txt = "".join(s["text"] for s in spans).strip()
                 if not txt:
                     continue
-                # Join multi-line content within the same cell with a space
                 sep = " " if cols_text[ci] else ""
                 cols_text[ci] = cols_text[ci] + sep + txt
 
-        # Skip completely empty rows
         if not any(c.strip() for c in cols_text):
             continue
-
         row_type = "header" if (yi == 0 and is_first_table_on_doc) else "data"
         rows.append((row_type, *cols_text))
-
     return rows
+
+
+def _header_color_from_page(page, table_rect):
+    """Sample the header-row fill colour from the PDF vector drawings."""
+    row_top = table_rect.y0
+    candidates = []
+    for d in page.get_drawings():
+        r = d.get("rect")
+        if r is None:
+            continue
+        f = d.get("fill")
+        if not f or f in ((1.0, 1.0, 1.0), (0.0, 0.0, 0.0)):
+            continue
+        if r.y0 <= row_top + 20 and r.y1 >= row_top:
+            area = max(0, min(r.x1, table_rect.x1) - max(r.x0, table_rect.x0))
+            candidates.append((area, f))
+    if not candidates:
+        return None
+    _, best = max(candidates, key=lambda x: x[0])
+    return f"{int(best[0]*255):02X}{int(best[1]*255):02X}{int(best[2]*255):02X}"
 
 
 def _spans_to_runs(paragraph, spans):
@@ -489,34 +477,6 @@ def _spans_to_runs(paragraph, spans):
         run.font.size = Pt(max(6, span["size"]))
         if span["color"]:
             run.font.color.rgb = _pdf_rgb(span["color"])
-
-
-def _header_color_from_page(page, table_rect):
-    """
-    Sample the background fill color of the very first row of the table
-    from the page's vector drawings so we can reproduce it in Word.
-    Returns a hex string like '1859A9', or None if nothing found.
-    """
-    row_top = table_rect.y0
-    drawings = page.get_drawings()
-    candidates = []
-    for d in drawings:
-        r = d.get("rect") or d.get("quad")
-        if r is None:
-            continue
-        f = d.get("fill")
-        if not f or f in ((1.0, 1.0, 1.0), (0.0, 0.0, 0.0)):
-            continue
-        # Must overlap the first ~20 pt of the table
-        if r.y0 <= row_top + 20 and r.y1 >= row_top:
-            area = max(0, min(r.x1, table_rect.x1) - max(r.x0, table_rect.x0))
-            candidates.append((area, f))
-    if not candidates:
-        return None
-    # Take the color with the largest horizontal coverage
-    _, best = max(candidates, key=lambda x: x[0])
-    r, g, b = int(best[0] * 255), int(best[1] * 255), int(best[2] * 255)
-    return f"{r:02X}{g:02X}{b:02X}"
 
 
 @app.route("/api/pdf-to-word", methods=["POST"])
@@ -534,8 +494,6 @@ def pdf_to_word():
     base_name = os.path.splitext(secure_filename(src.filename))[0] or "document"
 
     document = Document()
-
-    # A4 page, sensible margins
     for section in document.sections:
         section.page_width    = Cm(21)
         section.page_height   = Cm(29.7)
@@ -548,7 +506,6 @@ def pdf_to_word():
     normal_style.paragraph_format.space_after  = Pt(0)
     normal_style.paragraph_format.space_before = Pt(0)
 
-    # Track whether we have already placed the first table (for header detection)
     first_table_placed = False
 
     with fitz.open(stream=data, filetype="pdf") as doc:
@@ -556,8 +513,8 @@ def pdf_to_word():
             if page_index > 0:
                 document.add_page_break()
 
-            # ── 1. Detect genuine data tables on this page ──────────────────
-            table_rects = []   # list of fitz.Rect
+            # ── 1. Detect genuine data tables ────────────────────────────────
+            table_rects = []
             try:
                 found = page.find_tables()
                 for ft in found.tables:
@@ -565,7 +522,7 @@ def pdf_to_word():
                     ncols = max(len(r) for r in raw) if raw else 0
                     flat  = [c for r in raw for c in r if c and str(c).strip()]
                     w     = ft.bbox[2] - ft.bbox[0]
-                    # Accept: ≥3 rows, ≥2 cols, non-trivially populated, not full-page-width layout frame
+                    # Must be a real data table, not a full-page layout frame
                     if len(raw) >= 3 and ncols >= 2 and len(flat) >= 4 and w < page.rect.width - 10:
                         table_rects.append(fitz.Rect(ft.bbox))
             except Exception:
@@ -575,7 +532,7 @@ def pdf_to_word():
                 r = fitz.Rect(bbox)
                 return any(r.intersects(tr) for tr in table_rects)
 
-            # ── 2. Render all text outside tables ───────────────────────────
+            # ── 2. Text outside tables ───────────────────────────────────────
             raw_blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
             text_blocks = [
                 b for b in raw_blocks
@@ -591,11 +548,9 @@ def pdf_to_word():
                     full_text = "".join(s["text"] for s in spans).strip()
                     if not full_text:
                         continue
-
                     first = spans[0]
                     size  = first["size"]
                     color = first["color"]
-
                     if size >= 24:
                         p = document.add_paragraph(style="Heading 1")
                         run = p.add_run(full_text)
@@ -616,7 +571,7 @@ def pdf_to_word():
                         p.paragraph_format.space_before = Pt(0)
                         _spans_to_runs(p, spans)
 
-            # ── 3. Render each detected table ───────────────────────────────
+            # ── 3. Render tables with adaptive column detection ───────────────
             for tr in table_rects:
                 is_first = not first_table_placed
                 rows = _extract_table_rows_adaptive(
@@ -626,7 +581,6 @@ def pdf_to_word():
                     continue
                 first_table_placed = True
 
-                # Split header vs data rows
                 header_row = None
                 data_rows  = []
                 for r in rows:
@@ -640,15 +594,13 @@ def pdf_to_word():
 
                 all_rows = ([header_row] if header_row else []) + data_rows
                 ncols    = max(len(r) for r in all_rows)
-
-                # Ensure every row has exactly ncols cells (pad with "")
+                # Pad every row to ncols columns
                 all_rows = [r + [""] * (ncols - len(r)) for r in all_rows]
 
-                # Distribute column widths evenly across the usable page width
-                usable_cm  = 18.0  # 21 cm page − 1.5 cm × 2 margins
+                # Distribute column widths; give extra room to the first (widest) col
+                usable_cm  = 18.0
                 col_w_each = round(usable_cm / ncols, 2)
                 col_w      = [col_w_each] * ncols
-                # Give the first (usually widest) column more room when there are ≥3 cols
                 if ncols >= 3:
                     bonus = min(4.0, usable_cm * 0.25)
                     col_w[0] += bonus
@@ -656,7 +608,7 @@ def pdf_to_word():
                     for i in range(1, ncols):
                         col_w[i] = max(1.0, col_w[i] - share)
 
-                # Detect the header-row background colour from the PDF drawings
+                # Pick up the actual header background colour from the PDF drawings
                 hdr_fill = _header_color_from_page(page, tr) or "2F5496"
 
                 t = document.add_table(rows=len(all_rows), cols=ncols)
@@ -689,7 +641,7 @@ def pdf_to_word():
                         else:
                             run.font.color.rgb = RGBColor(0, 0, 0)
 
-                document.add_paragraph()  # small gap after table
+                document.add_paragraph()
 
     buf = io.BytesIO()
     document.save(buf)
@@ -698,103 +650,6 @@ def pdf_to_word():
     return send_bytes(
         buf.getvalue(),
         f"{base_name}.docx",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    )
-
-
-# ---------------------------------------------------------------------------
-# Image -> OCR Text / Word (.docx)
-# Reads JPG / PNG / BMP / TIFF / WebP and extracts text via Tesseract OCR.
-# Returns a plain .txt or a .docx depending on the requested output_format.
-# ---------------------------------------------------------------------------
-
-@app.route("/api/image-to-ocr", methods=["POST"])
-def image_to_ocr():
-    import pytesseract
-
-    files = get_uploaded_files()
-    if not files:
-        return jsonify({"error": "Upload one or more image files."}), 400
-
-    output_format = request.form.get("output_format", "txt")   # "txt" or "docx"
-    lang          = request.form.get("lang", "eng")            # tesseract language code
-
-    # Validate language code (safety: only allow alphanumeric + '+')
-    import re
-    if not re.match(r'^[a-zA-Z+]+$', lang):
-        lang = "eng"
-
-    # --- collect OCR text from every uploaded image ---
-    page_texts = []
-    for f in files:
-        try:
-            img = Image.open(f.stream)
-            # Convert to RGB so Tesseract is happy with any input mode
-            if img.mode not in ("RGB", "L"):
-                img = img.convert("RGB")
-            # Run Tesseract
-            ocr_text = pytesseract.image_to_string(img, lang=lang, config="--psm 3")
-            page_texts.append((os.path.splitext(secure_filename(f.filename))[0], ocr_text))
-        except Exception as e:
-            page_texts.append((f.filename, f"[OCR failed for this image: {e}]"))
-
-    if not page_texts:
-        return jsonify({"error": "No images could be processed."}), 400
-
-    base_name = page_texts[0][0] or "ocr_result"
-
-    # ── Plain text output ────────────────────────────────────────────────────
-    if output_format == "txt":
-        parts = []
-        for name, text in page_texts:
-            if len(page_texts) > 1:
-                parts.append(f"=== {name} ===\n")
-            parts.append(text.strip())
-            parts.append("")
-        full_text = "\n".join(parts).strip().encode("utf-8")
-        return send_bytes(full_text, f"{base_name}_ocr.txt", "text/plain; charset=utf-8")
-
-    # ── Word (.docx) output ──────────────────────────────────────────────────
-    from docx.shared import Cm, RGBColor
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-
-    document = Document()
-    for section in document.sections:
-        section.page_width    = Cm(21)
-        section.page_height   = Cm(29.7)
-        section.left_margin   = Cm(2.0)
-        section.right_margin  = Cm(2.0)
-        section.top_margin    = Cm(2.0)
-        section.bottom_margin = Cm(2.0)
-
-    normal = document.styles["Normal"]
-    normal.paragraph_format.space_after  = Pt(2)
-    normal.paragraph_format.space_before = Pt(0)
-
-    for idx, (name, text) in enumerate(page_texts):
-        if idx > 0:
-            document.add_page_break()
-
-        # Section heading when there are multiple images
-        if len(page_texts) > 1:
-            h = document.add_paragraph(style="Heading 1")
-            h.add_run(name)
-
-        # Write each line as its own paragraph so formatting is preserved
-        for line in text.splitlines():
-            p = document.add_paragraph()
-            p.paragraph_format.space_after  = Pt(0)
-            p.paragraph_format.space_before = Pt(0)
-            run = p.add_run(line)
-            run.font.size = Pt(10)
-            run.font.color.rgb = RGBColor(0, 0, 0)
-
-    buf = io.BytesIO()
-    document.save(buf)
-    buf.seek(0)
-    return send_bytes(
-        buf.getvalue(),
-        f"{base_name}_ocr.docx",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
 
@@ -1279,6 +1134,165 @@ def excel_to_pdf():
     buf.seek(0)
 
     return send_bytes(buf.getvalue(), f"{base_name}.pdf", "application/pdf")
+
+
+# ---------------------------------------------------------------------------
+# Image → OCR Text / Word (.docx)
+# Accepts JPG / PNG / BMP / TIFF / WebP.  Requires Tesseract on the server
+# (installed via nixpacks.toml for Railway deployments).
+# ---------------------------------------------------------------------------
+
+def _ocr_image(pil_img, lang="eng"):
+    """
+    Run Tesseract OCR on a PIL image.
+    Raises RuntimeError with a user-friendly message if Tesseract is missing.
+    """
+    import shutil, subprocess
+
+    tess_cmd = shutil.which("tesseract")
+    if not tess_cmd:
+        raise RuntimeError(
+            "Tesseract OCR is not installed on this server. "
+            "Add nixpacks.toml with tesseract to your Railway project and redeploy."
+        )
+    try:
+        import pytesseract
+    except ImportError:
+        raise RuntimeError(
+            "pytesseract is missing. Add it to requirements.txt and redeploy."
+        )
+
+    pytesseract.pytesseract.tesseract_cmd = tess_cmd
+
+    # Tell pytesseract where Railway puts tessdata (nix store path)
+    # Try to auto-detect from tesseract --version output if TESSDATA_PREFIX not set
+    import os
+    if not os.environ.get("TESSDATA_PREFIX"):
+        try:
+            out = subprocess.check_output([tess_cmd, "--version"],
+                                          stderr=subprocess.STDOUT).decode()
+            for line in out.splitlines():
+                if "tessdata" in line.lower() and os.path.isdir(line.strip()):
+                    os.environ["TESSDATA_PREFIX"] = line.strip()
+                    break
+        except Exception:
+            pass
+        # Fallback candidates
+        for candidate in ["/usr/share/tessdata", "/usr/share/tesseract-ocr/5/tessdata",
+                          "/usr/share/tesseract-ocr/4.00/tessdata"]:
+            if os.path.isdir(candidate):
+                os.environ.setdefault("TESSDATA_PREFIX", candidate)
+                break
+
+    # If the requested lang pack is missing, fall back to English gracefully
+    tessdata_dir = os.environ.get("TESSDATA_PREFIX", "")
+    if lang != "eng" and tessdata_dir:
+        for part in lang.split("+"):
+            tdata = os.path.join(tessdata_dir, f"{part}.traineddata")
+            if not os.path.isfile(tdata):
+                lang = "eng"   # fall back rather than crash
+                break
+
+    # Upscale tiny images — Tesseract is much more accurate at ≥ ~200 DPI
+    w, h = pil_img.size
+    if max(w, h) < 1200:
+        scale = 1200 / max(w, h)
+        pil_img = pil_img.resize(
+            (int(w * scale), int(h * scale)), Image.LANCZOS
+        )
+    return pytesseract.image_to_string(pil_img, lang=lang, config="--psm 3")
+
+
+@app.route("/api/image-to-ocr", methods=["POST"])
+def image_to_ocr():
+    import re
+    from docx.shared import Cm, RGBColor
+
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload one or more image files."}), 400
+
+    output_format = request.form.get("output_format", "txt")   # "txt" or "docx"
+    lang          = request.form.get("lang", "eng")            # tesseract lang code
+
+    # Whitelist: only letters + '+' (e.g. "eng", "ara", "ara+eng")
+    if not re.match(r'^[a-zA-Z+]{2,20}$', lang):
+        lang = "eng"
+
+    # ── OCR every uploaded image ─────────────────────────────────────────────
+    page_texts = []
+    for f in files:
+        name = os.path.splitext(secure_filename(f.filename))[0] or "image"
+        try:
+            img = Image.open(f.stream)
+            # Tesseract wants RGB or greyscale — flatten RGBA onto white bg
+            if img.mode == "RGBA":
+                bg = Image.new("RGB", img.size, (255, 255, 255))
+                bg.paste(img, mask=img.split()[3])
+                img = bg
+            elif img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+
+            ocr_text = _ocr_image(img, lang=lang)
+            page_texts.append((name, ocr_text))
+
+        except RuntimeError as e:
+            # Tesseract not installed — return a clear 503 immediately
+            return jsonify({"error": str(e)}), 503
+        except Exception as e:
+            page_texts.append((name, f"[Could not read this image: {e}]"))
+
+    if not page_texts:
+        return jsonify({"error": "No images could be processed."}), 400
+
+    base_name = page_texts[0][0] or "ocr_result"
+
+    # ── Plain-text output ────────────────────────────────────────────────────
+    if output_format == "txt":
+        parts = []
+        for name, text in page_texts:
+            if len(page_texts) > 1:
+                parts.append(f"=== {name} ===")
+            parts.append(text.strip())
+            parts.append("")
+        raw = "\n".join(parts).strip().encode("utf-8")
+        return send_bytes(raw, f"{base_name}_ocr.txt", "text/plain; charset=utf-8")
+
+    # ── Word (.docx) output ──────────────────────────────────────────────────
+    document = Document()
+    for section in document.sections:
+        section.page_width    = Cm(21)
+        section.page_height   = Cm(29.7)
+        section.left_margin   = Cm(2.0)
+        section.right_margin  = Cm(2.0)
+        section.top_margin    = Cm(2.0)
+        section.bottom_margin = Cm(2.0)
+
+    normal = document.styles["Normal"]
+    normal.paragraph_format.space_after  = Pt(2)
+    normal.paragraph_format.space_before = Pt(0)
+
+    for idx, (name, text) in enumerate(page_texts):
+        if idx > 0:
+            document.add_page_break()
+        if len(page_texts) > 1:
+            document.add_paragraph(style="Heading 1").add_run(name)
+        for line in text.splitlines():
+            p = document.add_paragraph()
+            p.paragraph_format.space_after  = Pt(0)
+            p.paragraph_format.space_before = Pt(0)
+            run = p.add_run(line)
+            run.font.size = Pt(10)
+            run.font.color.rgb = RGBColor(0, 0, 0)
+
+    buf = io.BytesIO()
+    document.save(buf)
+    buf.seek(0)
+    return send_bytes(
+        buf.getvalue(),
+        f"{base_name}_ocr.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
 
 
 # ---------------------------------------------------------------------------

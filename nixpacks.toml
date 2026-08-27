@@ -1,0 +1,15 @@
+[phases.setup]
+nixPkgs = [
+  "tesseract",   # Tesseract OCR engine (includes English traineddata)
+  "wget",        # needed to download Arabic language pack
+]
+
+[phases.build]
+cmds = [
+  # Download Arabic traineddata so the 'ara' and 'ara+eng' lang options work
+  "mkdir -p /usr/share/tessdata",
+  "wget -q -O /usr/share/tessdata/ara.traineddata https://github.com/tesseract-ocr/tessdata_fast/raw/main/ara.traineddata || true",
+]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]

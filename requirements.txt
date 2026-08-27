@@ -7,3 +7,4 @@ openpyxl
 python-pptx
 reportlab
 werkzeug
+pytesseract
