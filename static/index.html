@@ -179,32 +179,32 @@
   <!-- ORGANIZE -->
   <div class="section-title">Organize</div>
   <div class="grid">
-    <div class="card" onclick="open('merge')">
+    <div class="card" onclick="openTool('merge')">
       <div class="card-icon">🔗</div>
       <div class="card-name">Merge PDF</div>
       <div class="card-desc">Combine multiple PDFs into one file in any order</div>
     </div>
-    <div class="card" onclick="open('split')">
+    <div class="card" onclick="openTool('split')">
       <div class="card-icon">✂️</div>
       <div class="card-name">Split PDF</div>
       <div class="card-desc">Split one PDF into individual pages as a zip</div>
     </div>
-    <div class="card" onclick="open('remove-pages')">
+    <div class="card" onclick="openTool('remove-pages')">
       <div class="card-icon">🗑️</div>
       <div class="card-name">Remove Pages</div>
       <div class="card-desc">Click to preview and delete pages you don't need</div>
     </div>
-    <div class="card" onclick="open('extract-pages')">
+    <div class="card" onclick="openTool('extract-pages')">
       <div class="card-icon">📑</div>
       <div class="card-name">Organize Pages</div>
       <div class="card-desc">Drag pages to reorder, or select the ones to keep</div>
     </div>
-    <div class="card" onclick="open('rotate')">
+    <div class="card" onclick="openTool('rotate')">
       <div class="card-icon">🔄</div>
       <div class="card-name">Rotate PDF</div>
       <div class="card-desc">Rotate all pages by 90, 180, or 270 degrees</div>
     </div>
-    <div class="card" onclick="open('crop')">
+    <div class="card" onclick="openTool('crop')">
       <div class="card-icon">⬛</div>
       <div class="card-name">Crop PDF</div>
       <div class="card-desc">Trim margins off every page by a set amount</div>
@@ -214,17 +214,17 @@
   <!-- EDIT -->
   <div class="section-title">Edit</div>
   <div class="grid">
-    <div class="card" onclick="open('add-page-numbers')">
+    <div class="card" onclick="openTool('add-page-numbers')">
       <div class="card-icon">🔢</div>
       <div class="card-name">Add Page Numbers</div>
       <div class="card-desc">Stamp page numbers at any corner or center</div>
     </div>
-    <div class="card" onclick="open('watermark')">
+    <div class="card" onclick="openTool('watermark')">
       <div class="card-icon">💧</div>
       <div class="card-name">Watermark</div>
       <div class="card-desc">Add a diagonal text watermark to every page</div>
     </div>
-    <div class="card" onclick="open('compress')">
+    <div class="card" onclick="openTool('compress')">
       <div class="card-icon">🗜️</div>
       <div class="card-name">Compress PDF</div>
       <div class="card-desc">Reduce file size by downsampling images</div>
@@ -234,12 +234,12 @@
   <!-- SECURITY -->
   <div class="section-title">Security</div>
   <div class="grid">
-    <div class="card" onclick="open('protect')">
+    <div class="card" onclick="openTool('protect')">
       <div class="card-icon">🔐</div>
       <div class="card-name">Protect PDF</div>
       <div class="card-desc">Add a password to lock your PDF</div>
     </div>
-    <div class="card" onclick="open('unlock')">
+    <div class="card" onclick="openTool('unlock')">
       <div class="card-icon">🔓</div>
       <div class="card-name">Unlock PDF</div>
       <div class="card-desc">Remove password protection from a PDF</div>
@@ -249,27 +249,27 @@
   <!-- CONVERT FROM PDF -->
   <div class="section-title">Convert from PDF</div>
   <div class="grid">
-    <div class="card" onclick="open('pdf-to-images')">
+    <div class="card" onclick="openTool('pdf-to-images')">
       <div class="card-icon">🖼️</div>
       <div class="card-name">PDF to Images</div>
       <div class="card-desc">Export every page as a PNG image (zip download)</div>
     </div>
-    <div class="card" onclick="open('pdf-to-text')">
+    <div class="card" onclick="openTool('pdf-to-text')">
       <div class="card-icon">📄</div>
       <div class="card-name">PDF to Text</div>
       <div class="card-desc">Extract all text content from a PDF</div>
     </div>
-    <div class="card" onclick="open('pdf-to-word')">
+    <div class="card" onclick="openTool('pdf-to-word')">
       <div class="card-icon">📝</div>
       <div class="card-name">PDF to Word</div>
       <div class="card-desc">Convert PDF text content into a .docx file</div>
     </div>
-    <div class="card" onclick="open('pdf-to-pptx')">
+    <div class="card" onclick="openTool('pdf-to-pptx')">
       <div class="card-icon">📊</div>
       <div class="card-name">PDF to PowerPoint</div>
       <div class="card-desc">Each PDF page becomes a slide with its image</div>
     </div>
-    <div class="card" onclick="open('pdf-to-excel')">
+    <div class="card" onclick="openTool('pdf-to-excel')">
       <div class="card-icon">📈</div>
       <div class="card-name">PDF to Excel</div>
       <div class="card-desc">Extract tables and text into a .xlsx spreadsheet</div>
@@ -279,22 +279,22 @@
   <!-- CONVERT TO PDF -->
   <div class="section-title">Convert to PDF</div>
   <div class="grid">
-    <div class="card" onclick="open('images-to-pdf')">
+    <div class="card" onclick="openTool('images-to-pdf')">
       <div class="card-icon">📷</div>
       <div class="card-name">Images to PDF</div>
       <div class="card-desc">Combine JPG, PNG, or WebP images into one PDF</div>
     </div>
-    <div class="card" onclick="open('word-to-pdf')">
+    <div class="card" onclick="openTool('word-to-pdf')">
       <div class="card-icon">📄</div>
       <div class="card-name">Word to PDF</div>
       <div class="card-desc">Convert a .docx file into PDF format</div>
     </div>
-    <div class="card" onclick="open('pptx-to-pdf')">
+    <div class="card" onclick="openTool('pptx-to-pdf')">
       <div class="card-icon">🎯</div>
       <div class="card-name">PowerPoint to PDF</div>
       <div class="card-desc">Convert each slide of a .pptx into a PDF page</div>
     </div>
-    <div class="card" onclick="open('excel-to-pdf')">
+    <div class="card" onclick="openTool('excel-to-pdf')">
       <div class="card-icon">📋</div>
       <div class="card-name">Excel to PDF</div>
       <div class="card-desc">Convert .xlsx spreadsheet sheets into a PDF table</div>
@@ -545,7 +545,7 @@ let thumbDragSrcIdx = null;
 // ═══════════════════════════════════════════
 // Modal open / close
 // ═══════════════════════════════════════════
-function open(toolId) {
+function openTool(toolId) {
   const tool = TOOLS[toolId];
   if (!tool) return;
   currentTool = toolId;
