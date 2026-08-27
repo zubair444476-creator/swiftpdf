@@ -2,6 +2,7 @@ import os
 import io
 import zipfile
 import uuid
+import base64
 
 from flask import Flask, request, send_file, jsonify, render_template
 from werkzeug.utils import secure_filename
@@ -90,6 +91,39 @@ def index():
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"})
+
+
+# ---------------------------------------------------------------------------
+# Page thumbnails (used by the visual page picker in the frontend)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/page-thumbnails", methods=["POST"])
+def page_thumbnails():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a PDF file."}), 400
+
+    src = files[0]
+    data = src.read()
+
+    zoom = 0.4          # ~58 DPI — small enough to be fast, big enough to read
+    mat = fitz.Matrix(zoom, zoom)
+    thumbs = []
+
+    with fitz.open(stream=data, filetype="pdf") as doc:
+        page_count = len(doc)
+        for i, page in enumerate(doc):
+            pix = page.get_pixmap(matrix=mat)
+            png_bytes = pix.tobytes("png")
+            b64 = base64.b64encode(png_bytes).decode("ascii")
+            thumbs.append({
+                "page": i + 1,           # 1-indexed
+                "width": pix.width,
+                "height": pix.height,
+                "dataUrl": f"data:image/png;base64,{b64}",
+            })
+
+    return jsonify({"pageCount": page_count, "thumbnails": thumbs})
 
 
 # ---------------------------------------------------------------------------

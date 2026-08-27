@@ -3,764 +3,889 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>SwiftPDF — Every PDF tool you need</title>
+<title>SwiftPDF — Free Online PDF Tools</title>
 <style>
   :root {
-    --brand: #2f7d4f;
-    --brand-dark: #1f5c38;
-    --bg: #f6f8f7;
-    --card: #ffffff;
-    --text: #1c2b22;
-    --muted: #5f7267;
-    --border: #e1e8e3;
-    --danger: #c0392b;
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3450;
+    --accent: #5b6ef5;
+    --accent2: #7c8df7;
+    --text: #e8eaf6;
+    --muted: #8891b4;
+    --success: #4caf89;
+    --danger: #e05c6e;
+    --radius: 12px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
   }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-  }
-  header {
-    background: var(--brand);
-    color: white;
-    padding: 20px 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  header .logo {
-    font-size: 22px;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-  }
-  header .logo span { color: #d9f2e2; }
-  main {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 40px 20px 80px;
-  }
-  .hero {
-    text-align: center;
-    margin-bottom: 36px;
-  }
-  .hero h1 {
-    font-size: 34px;
-    margin-bottom: 8px;
-  }
-  .hero p {
-    color: var(--muted);
-    font-size: 16px;
-  }
-  .section-title {
-    font-size: 15px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--muted);
-    margin: 36px 0 14px;
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 18px;
-  }
-  .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 22px;
-    cursor: pointer;
-    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
-  }
-  .card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 24px rgba(47, 125, 79, 0.12);
-    border-color: var(--brand);
-  }
-  .card .icon { font-size: 30px; margin-bottom: 10px; }
-  .card h3 { margin: 0 0 6px; font-size: 17px; }
-  .card p { margin: 0; color: var(--muted); font-size: 13px; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
 
-  .modal-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(20, 30, 24, 0.5);
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    z-index: 50;
-    overflow-y: auto;
+  /* ── Header ── */
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 18px 32px; display: flex; align-items: center; gap: 14px; }
+  .logo { font-size: 1.6rem; font-weight: 800; color: var(--accent2); letter-spacing: -0.5px; }
+  .logo span { color: var(--text); }
+  .tagline { font-size: 0.85rem; color: var(--muted); margin-left: auto; }
+
+  /* ── Main layout ── */
+  main { max-width: 1200px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { font-size: 2.4rem; font-weight: 800; text-align: center; margin-bottom: 8px; }
+  .subtitle { text-align: center; color: var(--muted); font-size: 1.05rem; margin-bottom: 48px; }
+
+  /* ── Section headings ── */
+  .section-title {
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--muted); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin: 40px 0 20px;
   }
-  .modal-overlay.open { display: flex; }
+
+  /* ── Tool grid ── */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 24px 18px 20px; cursor: pointer; transition: border-color .18s, transform .18s, box-shadow .18s;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
+  }
+  .card:hover { border-color: var(--accent); transform: translateY(-3px); box-shadow: var(--shadow); }
+  .card-icon { font-size: 1.8rem; }
+  .card-name { font-size: 0.95rem; font-weight: 700; }
+  .card-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
+
+  /* ── Modal overlay ── */
+  .overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 100;
+    align-items: center; justify-content: center; padding: 16px;
+  }
+  .overlay.active { display: flex; }
   .modal {
-    background: var(--card);
-    border-radius: 16px;
-    width: 100%;
-    max-width: 520px;
-    padding: 28px;
-    position: relative;
-    margin: auto;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 32px; width: 100%; max-width: 620px; max-height: 90vh; overflow-y: auto;
+    box-shadow: var(--shadow); position: relative;
   }
-  .modal h2 { margin-top: 0; }
-  .modal .close-btn {
-    position: absolute;
-    top: 18px;
-    right: 18px;
-    background: none;
-    border: none;
-    font-size: 20px;
-    cursor: pointer;
-    color: var(--muted);
+  .modal h2 { font-size: 1.35rem; margin-bottom: 6px; }
+  .modal-desc { color: var(--muted); font-size: 0.88rem; margin-bottom: 24px; }
+  .close-btn {
+    position: absolute; top: 18px; right: 20px; background: none; border: none;
+    color: var(--muted); font-size: 1.4rem; cursor: pointer; line-height: 1;
   }
+  .close-btn:hover { color: var(--text); }
+
+  /* ── Form elements ── */
+  label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; color: var(--muted); }
+  .field { margin-bottom: 18px; }
+  input[type=text], input[type=number], input[type=password], select, textarea {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 10px 14px; font-size: 0.9rem; outline: none;
+    transition: border-color .15s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 80px; }
+
+  /* ── Drop zone ── */
   .dropzone {
-    border: 2px dashed var(--border);
-    border-radius: 12px;
-    padding: 30px;
-    text-align: center;
-    color: var(--muted);
-    cursor: pointer;
-    margin-bottom: 16px;
-    transition: border-color 0.15s ease, background 0.15s ease;
+    border: 2px dashed var(--border); border-radius: 10px; padding: 32px;
+    text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+    margin-bottom: 18px;
   }
-  .dropzone.dragover {
-    border-color: var(--brand);
-    background: #f0f9f3;
+  .dropzone:hover, .dropzone.drag-over { border-color: var(--accent); background: rgba(91,110,245,.07); }
+  .dropzone-icon { font-size: 2.2rem; margin-bottom: 8px; }
+  .dropzone-text { font-size: 0.9rem; color: var(--muted); }
+  .dropzone-text strong { color: var(--text); }
+  .file-list { margin-top: 12px; font-size: 0.8rem; color: var(--success); }
+  .file-list .file-item { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+  .file-list .file-item::before { content: "✓"; }
+
+  /* ── Visual thumbnail page picker ── */
+  .thumb-section { margin-bottom: 18px; }
+  .thumb-loading { color: var(--muted); font-size: 0.85rem; padding: 12px 0; }
+  .thumb-instructions { font-size: 0.82rem; color: var(--muted); margin-bottom: 10px; }
+  .thumb-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 10px; max-height: 340px; overflow-y: auto;
+    border: 1px solid var(--border); border-radius: 10px; padding: 12px;
+    background: var(--surface2);
   }
-  .file-list {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 16px;
-    max-height: 140px;
-    overflow-y: auto;
+  .thumb-item {
+    position: relative; cursor: pointer; border-radius: 6px; overflow: hidden;
+    border: 2px solid transparent; transition: border-color .15s, transform .12s;
+    background: #111;
   }
-  .file-list li {
-    display: flex;
-    justify-content: space-between;
-    padding: 6px 10px;
-    border-radius: 8px;
-    background: #f0f4f1;
-    margin-bottom: 6px;
-    font-size: 13px;
+  .thumb-item:hover { border-color: var(--accent2); transform: scale(1.03); }
+  .thumb-item.selected { border-color: var(--accent); }
+  .thumb-item.selected::after {
+    content: "✓"; position: absolute; top: 4px; right: 5px;
+    background: var(--accent); color: #fff; border-radius: 50%;
+    width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem; font-weight: 700;
   }
-  .options { margin-bottom: 16px; }
-  .options label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 6px; }
-  select, input[type="number"], input[type="text"], input[type="password"] {
-    width: 100%;
-    padding: 8px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    font-size: 14px;
-    font-family: inherit;
+  .thumb-item img { width: 100%; display: block; }
+  .thumb-label {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: rgba(0,0,0,.6); color: #fff; font-size: 0.7rem;
+    text-align: center; padding: 2px 0;
   }
-  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
-  .primary-btn {
-    width: 100%;
-    background: var(--brand);
-    color: white;
-    border: none;
-    padding: 12px;
-    border-radius: 10px;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
+  .thumb-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .thumb-actions button {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px; padding: 5px 12px; font-size: 0.78rem; cursor: pointer;
+    transition: border-color .15s, color .15s;
   }
-  .primary-btn:disabled { background: #9bbfa9; cursor: not-allowed; }
-  .primary-btn:hover:not(:disabled) { background: var(--brand-dark); }
-  .status { margin-top: 12px; font-size: 13px; min-height: 18px; }
-  .status.error { color: var(--danger); }
-  .status.success { color: var(--brand-dark); }
-  footer {
-    text-align: center;
-    color: var(--muted);
-    font-size: 13px;
-    padding: 20px;
+  .thumb-actions button:hover { border-color: var(--accent); color: var(--text); }
+  .thumb-selected-count { font-size: 0.82rem; color: var(--accent2); margin-top: 6px; font-weight: 600; }
+
+  /* ── Drag-to-reorder for organize tool ── */
+  .thumb-item.dragging { opacity: 0.4; border-color: var(--accent2); }
+  .thumb-item.drag-target { border-color: var(--success); }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; border: none; border-radius: 8px;
+    padding: 12px 22px; font-size: 0.92rem; font-weight: 600; cursor: pointer;
+    transition: opacity .15s, transform .12s;
   }
+  .btn:hover { opacity: 0.87; transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-full { width: 100%; justify-content: center; margin-top: 4px; }
+
+  /* ── Progress / status ── */
+  .status { margin-top: 14px; font-size: 0.88rem; padding: 10px 14px; border-radius: 8px; display: none; }
+  .status.info  { background: rgba(91,110,245,.15); color: var(--accent2); display: block; }
+  .status.ok    { background: rgba(76,175,137,.15); color: var(--success); display: block; }
+  .status.error { background: rgba(224,92,110,.15); color: var(--danger); display: block; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid transparent; border-top-color: currentColor; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Radio rows ── */
+  .radio-group { display: flex; flex-direction: column; gap: 8px; }
+  .radio-row { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; }
+  .radio-row input { accent-color: var(--accent); }
+
+  /* ── Footer ── */
+  footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); }
 </style>
 </head>
 <body>
 
 <header>
   <div class="logo">Swift<span>PDF</span></div>
-  <div style="font-size:13px; opacity:0.9;">Free online PDF tools</div>
+  <div class="tagline">Free • Unlimited • No sign-up</div>
 </header>
 
 <main>
-  <div class="hero">
-    <h1>Every PDF tool you need, in one place</h1>
-    <p>Merge, split, organize, protect, watermark and convert your PDFs — fast and free.</p>
-  </div>
+  <h1>Every PDF tool you need</h1>
+  <p class="subtitle">All processing happens on our server — nothing is stored.</p>
 
-  <h2 class="section-title">Organize</h2>
+  <!-- ORGANIZE -->
+  <div class="section-title">Organize</div>
   <div class="grid">
-    <div class="card" data-tool="merge">
-      <div class="icon">🧩</div>
-      <h3>Merge PDF</h3>
-      <p>Combine multiple PDFs into one document.</p>
+    <div class="card" onclick="open('merge')">
+      <div class="card-icon">🔗</div>
+      <div class="card-name">Merge PDF</div>
+      <div class="card-desc">Combine multiple PDFs into one file in any order</div>
     </div>
-    <div class="card" data-tool="split">
-      <div class="icon">✂️</div>
-      <h3>Split PDF</h3>
-      <p>Extract every page as its own PDF file.</p>
+    <div class="card" onclick="open('split')">
+      <div class="card-icon">✂️</div>
+      <div class="card-name">Split PDF</div>
+      <div class="card-desc">Split one PDF into individual pages as a zip</div>
     </div>
-    <div class="card" data-tool="remove-pages">
-      <div class="icon">🗑️</div>
-      <h3>Remove Pages</h3>
-      <p>Delete specific pages from a PDF.</p>
+    <div class="card" onclick="open('remove-pages')">
+      <div class="card-icon">🗑️</div>
+      <div class="card-name">Remove Pages</div>
+      <div class="card-desc">Click to preview and delete pages you don't need</div>
     </div>
-    <div class="card" data-tool="extract-pages">
-      <div class="icon">🔀</div>
-      <h3>Organize / Extract Pages</h3>
-      <p>Keep, reorder or extract chosen pages.</p>
+    <div class="card" onclick="open('extract-pages')">
+      <div class="card-icon">📑</div>
+      <div class="card-name">Organize Pages</div>
+      <div class="card-desc">Drag pages to reorder, or select the ones to keep</div>
     </div>
-    <div class="card" data-tool="rotate">
-      <div class="icon">🔄</div>
-      <h3>Rotate PDF</h3>
-      <p>Fix sideways or upside-down pages.</p>
+    <div class="card" onclick="open('rotate')">
+      <div class="card-icon">🔄</div>
+      <div class="card-name">Rotate PDF</div>
+      <div class="card-desc">Rotate all pages by 90, 180, or 270 degrees</div>
     </div>
-    <div class="card" data-tool="crop">
-      <div class="icon">🖼️</div>
-      <h3>Crop PDF</h3>
-      <p>Trim margins evenly from every page.</p>
-    </div>
-  </div>
-
-  <h2 class="section-title">Edit</h2>
-  <div class="grid">
-    <div class="card" data-tool="add-page-numbers">
-      <div class="icon">🔢</div>
-      <h3>Add Page Numbers</h3>
-      <p>Stamp page numbers on every page.</p>
-    </div>
-    <div class="card" data-tool="watermark">
-      <div class="icon">💧</div>
-      <h3>Watermark PDF</h3>
-      <p>Add a diagonal text watermark.</p>
-    </div>
-    <div class="card" data-tool="compress">
-      <div class="icon">📦</div>
-      <h3>Compress PDF</h3>
-      <p>Shrink file size while keeping good quality.</p>
+    <div class="card" onclick="open('crop')">
+      <div class="card-icon">⬛</div>
+      <div class="card-name">Crop PDF</div>
+      <div class="card-desc">Trim margins off every page by a set amount</div>
     </div>
   </div>
 
-  <h2 class="section-title">Security</h2>
+  <!-- EDIT -->
+  <div class="section-title">Edit</div>
   <div class="grid">
-    <div class="card" data-tool="protect">
-      <div class="icon">🔒</div>
-      <h3>Protect PDF</h3>
-      <p>Add a password to lock your PDF.</p>
+    <div class="card" onclick="open('add-page-numbers')">
+      <div class="card-icon">🔢</div>
+      <div class="card-name">Add Page Numbers</div>
+      <div class="card-desc">Stamp page numbers at any corner or center</div>
     </div>
-    <div class="card" data-tool="unlock">
-      <div class="icon">🔓</div>
-      <h3>Unlock PDF</h3>
-      <p>Remove a known password from a PDF.</p>
+    <div class="card" onclick="open('watermark')">
+      <div class="card-icon">💧</div>
+      <div class="card-name">Watermark</div>
+      <div class="card-desc">Add a diagonal text watermark to every page</div>
+    </div>
+    <div class="card" onclick="open('compress')">
+      <div class="card-icon">🗜️</div>
+      <div class="card-name">Compress PDF</div>
+      <div class="card-desc">Reduce file size by downsampling images</div>
     </div>
   </div>
 
-  <h2 class="section-title">Convert from PDF</h2>
+  <!-- SECURITY -->
+  <div class="section-title">Security</div>
   <div class="grid">
-    <div class="card" data-tool="pdf-to-images">
-      <div class="icon">📸</div>
-      <h3>PDF to JPG/PNG</h3>
-      <p>Export each page as a high-res image.</p>
+    <div class="card" onclick="open('protect')">
+      <div class="card-icon">🔐</div>
+      <div class="card-name">Protect PDF</div>
+      <div class="card-desc">Add a password to lock your PDF</div>
     </div>
-    <div class="card" data-tool="pdf-to-text">
-      <div class="icon">📄</div>
-      <h3>PDF to Text</h3>
-      <p>Extract all readable text from a PDF.</p>
-    </div>
-    <div class="card" data-tool="pdf-to-word">
-      <div class="icon">📝</div>
-      <h3>PDF to Word</h3>
-      <p>Convert a PDF into an editable .docx file.</p>
-    </div>
-    <div class="card" data-tool="pdf-to-pptx">
-      <div class="icon">📊</div>
-      <h3>PDF to PowerPoint</h3>
-      <p>Turn each PDF page into a slide.</p>
-    </div>
-    <div class="card" data-tool="pdf-to-excel">
-      <div class="icon">📈</div>
-      <h3>PDF to Excel</h3>
-      <p>Pull tables (or text) into a .xlsx file.</p>
+    <div class="card" onclick="open('unlock')">
+      <div class="card-icon">🔓</div>
+      <div class="card-name">Unlock PDF</div>
+      <div class="card-desc">Remove password protection from a PDF</div>
     </div>
   </div>
 
-  <h2 class="section-title">Convert to PDF</h2>
+  <!-- CONVERT FROM PDF -->
+  <div class="section-title">Convert from PDF</div>
   <div class="grid">
-    <div class="card" data-tool="images-to-pdf">
-      <div class="icon">🖼️</div>
-      <h3>Images to PDF</h3>
-      <p>Turn JPG or PNG images into one PDF.</p>
+    <div class="card" onclick="open('pdf-to-images')">
+      <div class="card-icon">🖼️</div>
+      <div class="card-name">PDF to Images</div>
+      <div class="card-desc">Export every page as a PNG image (zip download)</div>
     </div>
-    <div class="card" data-tool="word-to-pdf">
-      <div class="icon">📄</div>
-      <h3>Word to PDF</h3>
-      <p>Convert a .docx file into a PDF.</p>
+    <div class="card" onclick="open('pdf-to-text')">
+      <div class="card-icon">📄</div>
+      <div class="card-name">PDF to Text</div>
+      <div class="card-desc">Extract all text content from a PDF</div>
     </div>
-    <div class="card" data-tool="pptx-to-pdf">
-      <div class="icon">📄</div>
-      <h3>PowerPoint to PDF</h3>
-      <p>Convert a .pptx file into a PDF.</p>
+    <div class="card" onclick="open('pdf-to-word')">
+      <div class="card-icon">📝</div>
+      <div class="card-name">PDF to Word</div>
+      <div class="card-desc">Convert PDF text content into a .docx file</div>
     </div>
-    <div class="card" data-tool="excel-to-pdf">
-      <div class="icon">📄</div>
-      <h3>Excel to PDF</h3>
-      <p>Convert a .xlsx file into a PDF.</p>
+    <div class="card" onclick="open('pdf-to-pptx')">
+      <div class="card-icon">📊</div>
+      <div class="card-name">PDF to PowerPoint</div>
+      <div class="card-desc">Each PDF page becomes a slide with its image</div>
+    </div>
+    <div class="card" onclick="open('pdf-to-excel')">
+      <div class="card-icon">📈</div>
+      <div class="card-name">PDF to Excel</div>
+      <div class="card-desc">Extract tables and text into a .xlsx spreadsheet</div>
+    </div>
+  </div>
+
+  <!-- CONVERT TO PDF -->
+  <div class="section-title">Convert to PDF</div>
+  <div class="grid">
+    <div class="card" onclick="open('images-to-pdf')">
+      <div class="card-icon">📷</div>
+      <div class="card-name">Images to PDF</div>
+      <div class="card-desc">Combine JPG, PNG, or WebP images into one PDF</div>
+    </div>
+    <div class="card" onclick="open('word-to-pdf')">
+      <div class="card-icon">📄</div>
+      <div class="card-name">Word to PDF</div>
+      <div class="card-desc">Convert a .docx file into PDF format</div>
+    </div>
+    <div class="card" onclick="open('pptx-to-pdf')">
+      <div class="card-icon">🎯</div>
+      <div class="card-name">PowerPoint to PDF</div>
+      <div class="card-desc">Convert each slide of a .pptx into a PDF page</div>
+    </div>
+    <div class="card" onclick="open('excel-to-pdf')">
+      <div class="card-icon">📋</div>
+      <div class="card-name">Excel to PDF</div>
+      <div class="card-desc">Convert .xlsx spreadsheet sheets into a PDF table</div>
     </div>
   </div>
 </main>
 
-<footer>SwiftPDF — files are processed and returned directly; nothing is stored.</footer>
+<footer>SwiftPDF — All tools are free. Files are deleted after processing.</footer>
 
-<div class="modal-overlay" id="modalOverlay">
-  <div class="modal">
-    <button class="close-btn" id="closeModal">✕</button>
-    <h2 id="modalTitle">Tool</h2>
+<!-- ═══════════════════════════════════════════
+     MODAL
+═══════════════════════════════════════════ -->
+<div class="overlay" id="overlay" onclick="onOverlayClick(event)">
+  <div class="modal" id="modal">
+    <button class="close-btn" onclick="closeModal()">✕</button>
+    <h2 id="modal-title"></h2>
+    <p class="modal-desc" id="modal-desc"></p>
 
-    <div class="dropzone" id="dropzone">
-      <div>Drag &amp; drop files here, or click to choose</div>
+    <!-- Drop zone -->
+    <div class="dropzone" id="dropzone" onclick="fileInput.click()" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+      <div class="dropzone-icon">☁️</div>
+      <div class="dropzone-text"><strong>Click to browse</strong> or drag &amp; drop here</div>
+      <div class="dropzone-text" id="accept-hint" style="margin-top:4px;font-size:0.75rem;"></div>
     </div>
-    <input type="file" id="fileInput" multiple hidden />
-    <ul class="file-list" id="fileList"></ul>
+    <div class="file-list" id="file-list"></div>
+    <input type="file" id="fileInput" style="display:none" onchange="onFileChange(event)" multiple />
 
-    <div class="options" id="rotateOptions" style="display:none;">
-      <label for="angleSelect">Rotate by</label>
-      <select id="angleSelect">
-        <option value="90">90° clockwise</option>
-        <option value="180">180°</option>
-        <option value="270">270° clockwise (90° counter-clockwise)</option>
-      </select>
+    <!-- Visual thumbnail picker (for remove-pages and extract-pages) -->
+    <div class="thumb-section" id="thumb-section" style="display:none">
+      <label>Pages</label>
+      <div class="thumb-instructions" id="thumb-instructions"></div>
+      <div class="thumb-loading" id="thumb-loading" style="display:none">⏳ Loading page previews…</div>
+      <div class="thumb-grid" id="thumb-grid" style="display:none"></div>
+      <div class="thumb-actions" id="thumb-actions" style="display:none">
+        <button onclick="selectAllThumbs()">Select all</button>
+        <button onclick="selectNoneThumbs()">Select none</button>
+        <button onclick="invertThumbSelection()">Invert</button>
+      </div>
+      <div class="thumb-selected-count" id="thumb-count"></div>
+      <!-- Hidden input updated from thumb selection, read by submit -->
+      <input type="hidden" id="thumb-pages-value" />
     </div>
 
-    <div class="options" id="compressOptions" style="display:none;">
-      <label for="qualitySelect">Compression level</label>
-      <select id="qualitySelect">
-        <option value="low">Extreme compression (smaller file, lower quality)</option>
-        <option value="recommended" selected>Recommended</option>
-        <option value="high">High quality (larger file)</option>
-      </select>
-    </div>
+    <!-- Extra fields go here via JS -->
+    <div id="extra-fields"></div>
 
-    <div id="genericOptions"></div>
+    <div class="status" id="status"></div>
 
-    <button class="primary-btn" id="runBtn" disabled>Choose files to continue</button>
-    <div class="status" id="statusMsg"></div>
+    <button class="btn btn-primary btn-full" id="submit-btn" onclick="submitTool()">
+      <span id="submit-label">Process</span>
+    </button>
   </div>
 </div>
 
 <script>
+// ═══════════════════════════════════════════
+// Tool definitions
+// ═══════════════════════════════════════════
 const TOOLS = {
-  "merge": {
+  merge: {
     title: "Merge PDF",
+    desc: "Upload two or more PDFs. They'll be merged in the order you select them.",
     endpoint: "/api/merge",
     accept: ".pdf",
-    multiple: true,
-    minFiles: 2,
-    fieldName: "files",
-    cta: "Merge PDFs"
+    multi: true,
+    hint: "Accepts: PDF files",
   },
-  "split": {
+  split: {
     title: "Split PDF",
+    desc: "Upload one PDF. Each page will be saved as a separate file inside a ZIP.",
     endpoint: "/api/split",
     accept: ".pdf",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Split PDF"
+    hint: "Accepts: PDF file",
   },
   "remove-pages": {
     title: "Remove Pages",
+    desc: "Upload a PDF, then click the pages you want to delete. The rest will be saved.",
     endpoint: "/api/remove-pages",
     accept: ".pdf",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Remove Pages",
-    fields: [
-      { id: "pages", label: "Pages to remove", type: "text", placeholder: "e.g. 2,4-5", hint: "Comma-separated page numbers or ranges, 1-indexed." }
-    ]
+    hint: "Accepts: PDF file",
+    useThumbs: true,
+    thumbMode: "remove",   // select = pages to REMOVE
+    thumbInstructions: "Click pages to mark them for removal (highlighted in blue = will be deleted).",
   },
   "extract-pages": {
     title: "Organize / Extract Pages",
+    desc: "Select which pages to keep. Drag them to reorder before processing.",
     endpoint: "/api/extract-pages",
     accept: ".pdf",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Build New PDF",
-    fields: [
-      { id: "pages", label: "Pages to keep, in order", type: "text", placeholder: "e.g. 3,1,2 or 1-5", hint: "List pages in the order you want them to appear in the new PDF." }
-    ]
+    hint: "Accepts: PDF file",
+    useThumbs: true,
+    thumbMode: "extract",  // select = pages to KEEP, drag to reorder
+    thumbInstructions: "Click pages to keep them (highlighted = kept). Drag to reorder. Unselected pages are discarded.",
   },
-  "rotate": {
+  rotate: {
     title: "Rotate PDF",
+    desc: "Rotate all pages in the PDF by the chosen angle.",
     endpoint: "/api/rotate",
     accept: ".pdf",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Rotate PDF",
-    showRotateOptions: true
+    hint: "Accepts: PDF file",
+    fields: [{
+      id: "angle", label: "Rotation angle", type: "select",
+      options: [{ value: "90", label: "90° clockwise" }, { value: "180", label: "180°" }, { value: "270", label: "270° (90° counter-clockwise)" }]
+    }],
   },
-  "crop": {
+  crop: {
     title: "Crop PDF",
+    desc: "Trim a margin from every page. Enter the margin size in points (1 pt ≈ 0.35 mm). 36 pt ≈ 0.5 in.",
     endpoint: "/api/crop",
     accept: ".pdf",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Crop PDF",
-    fields: [
-      { id: "margin", label: "Margin to trim (points)", type: "number", placeholder: "36", default: "36", hint: "72 points = 1 inch. Applied evenly on all sides." }
-    ]
+    hint: "Accepts: PDF file",
+    fields: [{ id: "margin", label: "Margin to remove (points)", type: "number", placeholder: "36", min: 0, max: 300 }],
   },
   "add-page-numbers": {
     title: "Add Page Numbers",
+    desc: "Stamp page numbers onto every page.",
     endpoint: "/api/add-page-numbers",
     accept: ".pdf",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Add Page Numbers",
+    hint: "Accepts: PDF file",
     fields: [
-      { id: "start", label: "Start numbering at", type: "number", default: "1" },
+      { id: "start", label: "Starting number", type: "number", placeholder: "1", min: 0 },
       { id: "position", label: "Position", type: "select", options: [
-          { value: "bottom-center", label: "Bottom center" },
-          { value: "bottom-left", label: "Bottom left" },
-          { value: "bottom-right", label: "Bottom right" },
-          { value: "top-center", label: "Top center" }
-        ] }
-    ]
+        { value: "bottom-center", label: "Bottom center" },
+        { value: "bottom-left",  label: "Bottom left" },
+        { value: "bottom-right", label: "Bottom right" },
+        { value: "top-center",   label: "Top center" },
+      ]},
+    ],
   },
-  "watermark": {
+  watermark: {
     title: "Watermark PDF",
+    desc: "Add a diagonal text watermark to every page.",
     endpoint: "/api/watermark",
     accept: ".pdf",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Add Watermark",
+    hint: "Accepts: PDF file",
     fields: [
-      { id: "text", label: "Watermark text", type: "text", default: "CONFIDENTIAL" },
-      { id: "opacity", label: "Opacity (0.05 – 1)", type: "number", default: "0.3" }
-    ]
+      { id: "text", label: "Watermark text", type: "text", placeholder: "CONFIDENTIAL" },
+      { id: "opacity", label: "Opacity (0.05–1.0)", type: "number", placeholder: "0.3", min: 0.05, max: 1.0, step: 0.05 },
+    ],
   },
-  "compress": {
+  compress: {
     title: "Compress PDF",
+    desc: "Reduce file size by recompressing images inside the PDF.",
     endpoint: "/api/compress",
     accept: ".pdf",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Compress PDF",
-    showCompressOptions: true
+    hint: "Accepts: PDF file",
+    fields: [{
+      id: "quality", label: "Quality level", type: "select",
+      options: [
+        { value: "recommended", label: "Recommended (balanced)" },
+        { value: "high",        label: "High quality (less compression)" },
+        { value: "low",         label: "Small file (more compression)" },
+      ],
+    }],
   },
-  "protect": {
+  protect: {
     title: "Protect PDF",
+    desc: "Add password protection to a PDF. Anyone opening it will need this password.",
     endpoint: "/api/protect",
     accept: ".pdf",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Protect PDF",
-    fields: [
-      { id: "password", label: "Set a password", type: "password", placeholder: "Enter a password" }
-    ]
+    hint: "Accepts: PDF file",
+    fields: [{ id: "password", label: "Password", type: "password", placeholder: "Enter a strong password" }],
   },
-  "unlock": {
+  unlock: {
     title: "Unlock PDF",
+    desc: "Remove password protection from a PDF. You need to know the current password.",
     endpoint: "/api/unlock",
     accept: ".pdf",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Unlock PDF",
-    fields: [
-      { id: "password", label: "Current password", type: "password", placeholder: "Enter the PDF's password" }
-    ]
-  },
-  "images-to-pdf": {
-    title: "Images to PDF",
-    endpoint: "/api/images-to-pdf",
-    accept: "image/*",
-    multiple: true,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Convert to PDF"
+    hint: "Accepts: PDF file",
+    fields: [{ id: "password", label: "Current password", type: "password", placeholder: "Enter the PDF's password" }],
   },
   "pdf-to-images": {
-    title: "PDF to JPG/PNG",
+    title: "PDF to Images",
+    desc: "Export every page as a PNG at 144 DPI. You'll download a ZIP file.",
     endpoint: "/api/pdf-to-images",
     accept: ".pdf",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Convert to Images"
+    hint: "Accepts: PDF file",
   },
   "pdf-to-text": {
     title: "PDF to Text",
+    desc: "Extract all the text content from a PDF into a plain .txt file.",
     endpoint: "/api/pdf-to-text",
     accept: ".pdf",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Extract Text"
+    hint: "Accepts: PDF file",
   },
   "pdf-to-word": {
     title: "PDF to Word",
+    desc: "Convert PDF text into a Word .docx. Complex layouts may be simplified.",
     endpoint: "/api/pdf-to-word",
     accept: ".pdf",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Convert to Word"
+    hint: "Accepts: PDF file",
   },
   "pdf-to-pptx": {
     title: "PDF to PowerPoint",
+    desc: "Each PDF page becomes a slide with a full-page image. Fully editable in PowerPoint.",
     endpoint: "/api/pdf-to-pptx",
     accept: ".pdf",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Convert to PowerPoint"
+    hint: "Accepts: PDF file",
   },
   "pdf-to-excel": {
     title: "PDF to Excel",
+    desc: "Detects tables in the PDF and exports them to .xlsx. Falls back to raw text if no table found.",
     endpoint: "/api/pdf-to-excel",
     accept: ".pdf",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Convert to Excel"
+    hint: "Accepts: PDF file",
+  },
+  "images-to-pdf": {
+    title: "Images to PDF",
+    desc: "Combine one or more images (JPG, PNG, WebP) into a single PDF.",
+    endpoint: "/api/images-to-pdf",
+    accept: ".jpg,.jpeg,.png,.webp,.bmp,.tiff",
+    multi: true,
+    hint: "Accepts: JPG, PNG, WebP, BMP, TIFF",
   },
   "word-to-pdf": {
     title: "Word to PDF",
+    desc: "Convert a .docx file to PDF. Fonts and exact layout may vary.",
     endpoint: "/api/word-to-pdf",
     accept: ".docx",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Convert to PDF"
+    hint: "Accepts: .docx file",
   },
   "pptx-to-pdf": {
     title: "PowerPoint to PDF",
+    desc: "Convert a .pptx presentation to PDF. Text content is preserved.",
     endpoint: "/api/pptx-to-pdf",
     accept: ".pptx",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Convert to PDF"
+    hint: "Accepts: .pptx file",
   },
   "excel-to-pdf": {
     title: "Excel to PDF",
+    desc: "Convert an .xlsx spreadsheet to PDF. Each sheet becomes a table.",
     endpoint: "/api/excel-to-pdf",
     accept: ".xlsx",
-    multiple: false,
-    minFiles: 1,
-    fieldName: "files",
-    cta: "Convert to PDF"
-  }
+    hint: "Accepts: .xlsx file",
+  },
 };
 
+// ═══════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════
 let currentTool = null;
 let selectedFiles = [];
 
-const modalOverlay = document.getElementById("modalOverlay");
-const modalTitle = document.getElementById("modalTitle");
-const dropzone = document.getElementById("dropzone");
-const fileInput = document.getElementById("fileInput");
-const fileList = document.getElementById("fileList");
-const runBtn = document.getElementById("runBtn");
-const statusMsg = document.getElementById("statusMsg");
-const rotateOptions = document.getElementById("rotateOptions");
-const compressOptions = document.getElementById("compressOptions");
-const genericOptions = document.getElementById("genericOptions");
+// Thumbnail picker state
+let thumbOrder = [];        // array of {page, dataUrl, selected}
+let thumbDragSrcIdx = null;
 
-document.querySelectorAll(".card").forEach(card => {
-  card.addEventListener("click", () => openModal(card.dataset.tool));
-});
-
-document.getElementById("closeModal").addEventListener("click", closeModal);
-modalOverlay.addEventListener("click", (e) => {
-  if (e.target === modalOverlay) closeModal();
-});
-
-function openModal(toolKey) {
-  currentTool = TOOLS[toolKey];
+// ═══════════════════════════════════════════
+// Modal open / close
+// ═══════════════════════════════════════════
+function open(toolId) {
+  const tool = TOOLS[toolId];
+  if (!tool) return;
+  currentTool = toolId;
   selectedFiles = [];
-  modalTitle.textContent = currentTool.title;
-  fileInput.multiple = currentTool.multiple;
-  fileInput.accept = currentTool.accept;
-  fileInput.value = "";
-  fileList.innerHTML = "";
-  statusMsg.textContent = "";
-  statusMsg.className = "status";
-  runBtn.textContent = currentTool.cta;
-  runBtn.disabled = true;
 
-  rotateOptions.style.display = currentTool.showRotateOptions ? "block" : "none";
-  compressOptions.style.display = currentTool.showCompressOptions ? "block" : "none";
+  // Reset thumb state
+  thumbOrder = [];
+  thumbDragSrcIdx = null;
 
-  genericOptions.innerHTML = "";
-  if (currentTool.fields) {
-    currentTool.fields.forEach(field => {
-      const wrapper = document.createElement("div");
-      wrapper.className = "options";
+  // Header
+  document.getElementById("modal-title").textContent = tool.title;
+  document.getElementById("modal-desc").textContent = tool.desc;
+  document.getElementById("accept-hint").textContent = tool.hint || "";
 
-      const label = document.createElement("label");
-      label.setAttribute("for", "field_" + field.id);
-      label.textContent = field.label;
-      wrapper.appendChild(label);
+  // File input
+  const fi = document.getElementById("fileInput");
+  fi.accept = tool.accept || "";
+  fi.multiple = !!tool.multi || !!tool.useThumbs;
 
-      let input;
-      if (field.type === "select") {
-        input = document.createElement("select");
-        field.options.forEach(opt => {
-          const optionEl = document.createElement("option");
-          optionEl.value = opt.value;
-          optionEl.textContent = opt.label;
-          input.appendChild(optionEl);
-        });
-      } else {
-        input = document.createElement("input");
-        input.type = field.type;
-        if (field.placeholder) input.placeholder = field.placeholder;
-        if (field.default !== undefined) input.value = field.default;
-      }
-      input.id = "field_" + field.id;
-      wrapper.appendChild(input);
+  // File list
+  document.getElementById("file-list").innerHTML = "";
 
-      if (field.hint) {
-        const hint = document.createElement("div");
-        hint.className = "hint";
-        hint.textContent = field.hint;
-        wrapper.appendChild(hint);
-      }
-
-      genericOptions.appendChild(wrapper);
-    });
+  // Thumb section
+  const thumbSection = document.getElementById("thumb-section");
+  if (tool.useThumbs) {
+    thumbSection.style.display = "block";
+    document.getElementById("thumb-instructions").textContent = tool.thumbInstructions || "";
+    document.getElementById("thumb-loading").style.display = "none";
+    document.getElementById("thumb-grid").style.display = "none";
+    document.getElementById("thumb-grid").innerHTML = "";
+    document.getElementById("thumb-actions").style.display = "none";
+    document.getElementById("thumb-count").textContent = "";
+    document.getElementById("thumb-pages-value").value = "";
+  } else {
+    thumbSection.style.display = "none";
   }
 
-  modalOverlay.classList.add("open");
+  // Extra fields
+  const ef = document.getElementById("extra-fields");
+  ef.innerHTML = "";
+  (tool.fields || []).forEach(f => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "field";
+    const lbl = document.createElement("label");
+    lbl.textContent = f.label;
+    wrapper.appendChild(lbl);
+    let el;
+    if (f.type === "select") {
+      el = document.createElement("select");
+      el.id = "field-" + f.id;
+      (f.options || []).forEach(o => {
+        const opt = document.createElement("option");
+        opt.value = o.value; opt.textContent = o.label;
+        el.appendChild(opt);
+      });
+    } else if (f.type === "number") {
+      el = document.createElement("input");
+      el.type = "number"; el.id = "field-" + f.id;
+      if (f.placeholder) el.placeholder = f.placeholder;
+      if (f.min !== undefined) el.min = f.min;
+      if (f.max !== undefined) el.max = f.max;
+      if (f.step !== undefined) el.step = f.step;
+    } else if (f.type === "password") {
+      el = document.createElement("input");
+      el.type = "password"; el.id = "field-" + f.id;
+      if (f.placeholder) el.placeholder = f.placeholder;
+    } else {
+      el = document.createElement("input");
+      el.type = "text"; el.id = "field-" + f.id;
+      if (f.placeholder) el.placeholder = f.placeholder;
+    }
+    wrapper.appendChild(el);
+    ef.appendChild(wrapper);
+  });
+
+  // Status & button
+  setStatus("", "");
+  document.getElementById("submit-label").textContent = "Process";
+  document.getElementById("submit-btn").disabled = false;
+
+  document.getElementById("overlay").classList.add("active");
 }
 
 function closeModal() {
-  modalOverlay.classList.remove("open");
+  document.getElementById("overlay").classList.remove("active");
   currentTool = null;
+  selectedFiles = [];
+  thumbOrder = [];
 }
 
-dropzone.addEventListener("click", () => fileInput.click());
-dropzone.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  dropzone.classList.add("dragover");
-});
-dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
-dropzone.addEventListener("drop", (e) => {
-  e.preventDefault();
-  dropzone.classList.remove("dragover");
-  handleFiles(e.dataTransfer.files);
-});
-fileInput.addEventListener("change", () => handleFiles(fileInput.files));
-
-function handleFiles(fileListObj) {
-  const files = Array.from(fileListObj);
-  selectedFiles = currentTool.multiple ? selectedFiles.concat(files) : files.slice(0, 1);
-  renderFileList();
+function onOverlayClick(e) {
+  if (e.target === document.getElementById("overlay")) closeModal();
 }
 
-function renderFileList() {
-  fileList.innerHTML = "";
-  selectedFiles.forEach((f, idx) => {
-    const li = document.createElement("li");
-    const sizeKb = (f.size / 1024).toFixed(0);
-    li.innerHTML = `<span>${f.name} (${sizeKb} KB)</span>`;
-    const removeBtn = document.createElement("span");
-    removeBtn.textContent = "✕";
-    removeBtn.style.cursor = "pointer";
-    removeBtn.style.color = "#c0392b";
-    removeBtn.addEventListener("click", () => {
-      selectedFiles.splice(idx, 1);
-      renderFileList();
+// ═══════════════════════════════════════════
+// File selection
+// ═══════════════════════════════════════════
+function onFileChange(e) {
+  handleFiles(Array.from(e.target.files));
+}
+function onDragOver(e) { e.preventDefault(); document.getElementById("dropzone").classList.add("drag-over"); }
+function onDragLeave()  { document.getElementById("dropzone").classList.remove("drag-over"); }
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById("dropzone").classList.remove("drag-over");
+  handleFiles(Array.from(e.dataTransfer.files));
+}
+
+function handleFiles(files) {
+  selectedFiles = files;
+  renderFileList(files);
+  const tool = TOOLS[currentTool];
+  if (tool && tool.useThumbs && files.length === 1) {
+    loadThumbnails(files[0]);
+  }
+}
+
+function renderFileList(files) {
+  const el = document.getElementById("file-list");
+  el.innerHTML = files.map(f => `<div class="file-item">${f.name} <span style="color:var(--muted)">(${(f.size/1024).toFixed(0)} KB)</span></div>`).join("");
+}
+
+// ═══════════════════════════════════════════
+// Thumbnail loader
+// ═══════════════════════════════════════════
+async function loadThumbnails(file) {
+  const loadingEl = document.getElementById("thumb-loading");
+  const gridEl    = document.getElementById("thumb-grid");
+  const actionsEl = document.getElementById("thumb-actions");
+  const countEl   = document.getElementById("thumb-count");
+
+  loadingEl.style.display = "block";
+  gridEl.style.display    = "none";
+  actionsEl.style.display = "none";
+  gridEl.innerHTML = "";
+  thumbOrder = [];
+  countEl.textContent = "";
+
+  const fd = new FormData();
+  fd.append("file", file);
+
+  try {
+    const res = await fetch("/api/page-thumbnails", { method: "POST", body: fd });
+    const json = await res.json();
+    if (!res.ok || json.error) { loadingEl.textContent = "⚠ " + (json.error || "Failed to load previews."); return; }
+
+    const tool = TOOLS[currentTool];
+    const isExtract = tool.thumbMode === "extract";
+
+    // Build thumbOrder: for "extract", default all selected; for "remove", default none selected
+    thumbOrder = json.thumbnails.map(t => ({ page: t.page, dataUrl: t.dataUrl, selected: isExtract }));
+
+    renderThumbGrid();
+    loadingEl.style.display = "none";
+    gridEl.style.display    = "grid";
+    actionsEl.style.display = "flex";
+    updateThumbCount();
+  } catch (err) {
+    loadingEl.textContent = "⚠ Could not load page previews. You can still use the tool.";
+  }
+}
+
+function renderThumbGrid() {
+  const tool = TOOLS[currentTool];
+  const isExtract = tool && tool.thumbMode === "extract";
+  const gridEl = document.getElementById("thumb-grid");
+  gridEl.innerHTML = "";
+
+  thumbOrder.forEach((item, idx) => {
+    const div = document.createElement("div");
+    div.className = "thumb-item" + (item.selected ? " selected" : "");
+    div.dataset.idx = idx;
+
+    const img = document.createElement("img");
+    img.src = item.dataUrl;
+    img.alt = "Page " + item.page;
+
+    const lbl = document.createElement("div");
+    lbl.className = "thumb-label";
+    lbl.textContent = "P" + item.page;
+
+    div.appendChild(img);
+    div.appendChild(lbl);
+
+    // Click to toggle selection
+    div.addEventListener("click", () => {
+      thumbOrder[idx].selected = !thumbOrder[idx].selected;
+      div.classList.toggle("selected");
+      updateThumbCount();
     });
-    li.appendChild(removeBtn);
-    fileList.appendChild(li);
+
+    // Drag-to-reorder (only for extract mode)
+    if (isExtract) {
+      div.draggable = true;
+      div.addEventListener("dragstart", e => {
+        thumbDragSrcIdx = idx;
+        div.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+      });
+      div.addEventListener("dragend", () => div.classList.remove("dragging"));
+      div.addEventListener("dragover", e => { e.preventDefault(); div.classList.add("drag-target"); });
+      div.addEventListener("dragleave", () => div.classList.remove("drag-target"));
+      div.addEventListener("drop", e => {
+        e.preventDefault();
+        div.classList.remove("drag-target");
+        if (thumbDragSrcIdx === null || thumbDragSrcIdx === idx) return;
+        // Reorder thumbOrder
+        const [moved] = thumbOrder.splice(thumbDragSrcIdx, 1);
+        thumbOrder.splice(idx, 0, moved);
+        thumbDragSrcIdx = null;
+        renderThumbGrid();
+        updateThumbCount();
+      });
+    }
+
+    gridEl.appendChild(div);
+  });
+}
+
+function updateThumbCount() {
+  const tool = TOOLS[currentTool];
+  if (!tool) return;
+  const isExtract = tool.thumbMode === "extract";
+  const count = thumbOrder.filter(t => t.selected).length;
+  const total = thumbOrder.length;
+  const countEl = document.getElementById("thumb-count");
+  if (isExtract) {
+    countEl.textContent = `${count} of ${total} pages selected to keep`;
+  } else {
+    countEl.textContent = count > 0 ? `${count} page${count !== 1 ? "s" : ""} marked for removal` : "No pages selected";
+  }
+}
+
+function selectAllThumbs()    { thumbOrder.forEach(t => t.selected = true);  renderThumbGrid(); updateThumbCount(); }
+function selectNoneThumbs()   { thumbOrder.forEach(t => t.selected = false); renderThumbGrid(); updateThumbCount(); }
+function invertThumbSelection() { thumbOrder.forEach(t => t.selected = !t.selected); renderThumbGrid(); updateThumbCount(); }
+
+function buildPageSpec() {
+  // Returns a comma-separated list of page numbers (1-indexed) to act on
+  // For "remove": selected = pages to delete
+  // For "extract": selected = pages to keep (in current order)
+  const tool = TOOLS[currentTool];
+  if (!tool || !tool.useThumbs) return "";
+  if (tool.thumbMode === "extract") {
+    return thumbOrder.filter(t => t.selected).map(t => t.page).join(",");
+  } else {
+    return thumbOrder.filter(t => t.selected).map(t => t.page).join(",");
+  }
+}
+
+// ═══════════════════════════════════════════
+// Status helper
+// ═══════════════════════════════════════════
+function setStatus(msg, type) {
+  const el = document.getElementById("status");
+  el.className = "status " + (type || "");
+  el.innerHTML = msg;
+  el.style.display = msg ? "block" : "none";
+}
+
+// ═══════════════════════════════════════════
+// Submit
+// ═══════════════════════════════════════════
+async function submitTool() {
+  const tool = TOOLS[currentTool];
+  if (!tool) return;
+
+  if (!selectedFiles.length) {
+    setStatus("Please upload a file first.", "error"); return;
+  }
+
+  const btn = document.getElementById("submit-btn");
+  const lbl = document.getElementById("submit-label");
+  btn.disabled = true;
+  lbl.innerHTML = '<span class="spinner"></span> Processing…';
+  setStatus("Processing your file, please wait…", "info");
+
+  const fd = new FormData();
+  selectedFiles.forEach(f => fd.append("files", f));
+
+  // Attach extra fields
+  (tool.fields || []).forEach(f => {
+    const el = document.getElementById("field-" + f.id);
+    if (el) fd.append(f.id, el.value);
   });
 
-  const enough = selectedFiles.length >= currentTool.minFiles;
-  runBtn.disabled = !enough;
-  runBtn.textContent = enough
-    ? currentTool.cta
-    : `Add at least ${currentTool.minFiles} file${currentTool.minFiles > 1 ? "s" : ""}`;
-}
-
-runBtn.addEventListener("click", async () => {
-  if (!currentTool || selectedFiles.length < currentTool.minFiles) return;
-
-  runBtn.disabled = true;
-  runBtn.textContent = "Processing…";
-  statusMsg.textContent = "";
-  statusMsg.className = "status";
-
-  const formData = new FormData();
-  selectedFiles.forEach(f => formData.append(currentTool.fieldName, f));
-
-  if (currentTool.showRotateOptions) {
-    formData.append("angle", document.getElementById("angleSelect").value);
-  }
-  if (currentTool.showCompressOptions) {
-    formData.append("quality", document.getElementById("qualitySelect").value);
-  }
-  if (currentTool.fields) {
-    currentTool.fields.forEach(field => {
-      const el = document.getElementById("field_" + field.id);
-      if (el) formData.append(field.id, el.value);
-    });
+  // Attach page spec from thumb picker
+  if (tool.useThumbs) {
+    const spec = buildPageSpec();
+    if (!spec) {
+      setStatus(
+        tool.thumbMode === "remove"
+          ? "Select at least one page to remove."
+          : "Select at least one page to keep.",
+        "error"
+      );
+      btn.disabled = false;
+      lbl.textContent = "Process";
+      return;
+    }
+    fd.append("pages", spec);
   }
 
   try {
-    const res = await fetch(currentTool.endpoint, {
-      method: "POST",
-      body: formData
-    });
+    const res = await fetch(tool.endpoint, { method: "POST", body: fd });
 
     if (!res.ok) {
-      let msg = "Something went wrong. Please try again.";
-      try {
-        const errJson = await res.json();
-        if (errJson.error) msg = errJson.error;
-      } catch (_) {}
-      throw new Error(msg);
+      const err = await res.json().catch(() => ({ error: "Unknown error" }));
+      setStatus("❌ " + (err.error || "Something went wrong."), "error");
+      btn.disabled = false; lbl.textContent = "Process"; return;
     }
 
+    // Trigger download
     const blob = await res.blob();
-    const disposition = res.headers.get("Content-Disposition") || "";
-    let filename = "output";
-    const match = disposition.match(/filename="?([^"]+)"?/);
-    if (match) filename = match[1];
+    const cd = res.headers.get("Content-Disposition") || "";
+    let filename = "download";
+    const m = cd.match(/filename="?([^"]+)"?/);
+    if (m) filename = m[1];
 
-    const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = URL.createObjectURL(blob);
     a.download = filename;
-    document.body.appendChild(a);
     a.click();
-    a.remove();
-    window.URL.revokeObjectURL(url);
+    URL.revokeObjectURL(a.href);
 
-    statusMsg.textContent = "Done! Your download has started.";
-    statusMsg.className = "status success";
+    setStatus("✅ Done! Your file is downloading.", "ok");
+    btn.disabled = false; lbl.textContent = "Process again";
+
   } catch (err) {
-    statusMsg.textContent = err.message || "Something went wrong.";
-    statusMsg.className = "status error";
-  } finally {
-    runBtn.disabled = false;
-    runBtn.textContent = currentTool.cta;
+    setStatus("❌ Network error: " + err.message, "error");
+    btn.disabled = false; lbl.textContent = "Process";
   }
+}
+
+// ═══════════════════════════════════════════
+// Keyboard shortcut
+// ═══════════════════════════════════════════
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeModal();
 });
 </script>
-
 </body>
 </html>
