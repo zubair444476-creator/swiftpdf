@@ -329,11 +329,194 @@ def pdf_to_text():
 
 
 # ---------------------------------------------------------------------------
-# PDF -> Word (.docx)
+# PDF -> Word (.docx)  — rich conversion: headings, bold, color, tables
 # ---------------------------------------------------------------------------
+
+def _pdf_int_to_rgb(color_int):
+    from docx.shared import RGBColor
+    return RGBColor((color_int >> 16) & 0xFF, (color_int >> 8) & 0xFF, color_int & 0xFF)
+
+
+def _set_cell_bg(cell, hex_fill):
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:color"), "auto")
+    shd.set(qn("w:fill"), hex_fill)
+    tcPr.append(shd)
+
+
+def _render_rich_spans(paragraph, spans):
+    for span in spans:
+        text = span["text"]
+        if not text:
+            continue
+        run = paragraph.add_run(text)
+        run.bold   = bool(span["flags"] & 16)
+        run.italic = bool(span["flags"] & 2)
+        run.font.size = Pt(max(6, span["size"]))
+        if span["color"]:
+            run.font.color.rgb = _pdf_int_to_rgb(span["color"])
+
+
+def _convert_page_to_docx(page, document):
+    from docx.shared import Pt, RGBColor, Cm
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+
+    # ── Detect tables ────────────────────────────────────────────────────────
+    table_rects = []
+    page_tables = []   # list of (fitz.Rect, [[cell,...], ...], ncols)
+    try:
+        found = page.find_tables()
+        for ft in found.tables:
+            raw = ft.extract()
+            if len(raw) < 2:
+                continue
+            ncols = max(len(r) for r in raw)
+            if ncols < 2:
+                continue
+            flat = [c for row in raw for c in row if c and str(c).strip()]
+            if len(flat) < 4:
+                continue
+            rect = fitz.Rect(ft.bbox)
+            table_rects.append(rect)
+            padded = [(list(r) + [""] * ncols)[:ncols] for r in raw]
+            page_tables.append((rect, padded, ncols))
+    except Exception:
+        pass
+
+    def in_table(bbox):
+        r = fitz.Rect(bbox)
+        return any(r.intersects(tr) for tr in table_rects)
+
+    # ── Collect text blocks outside tables ───────────────────────────────────
+    raw_blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
+    text_blocks = [b for b in raw_blocks if b.get("type") == 0 and not in_table(b["bbox"])]
+    text_blocks.sort(key=lambda b: (round(b["bbox"][1] / 4) * 4, b["bbox"][0]))
+
+    # ── Interleave text + tables in reading order ────────────────────────────
+    items = [(b["bbox"][1], "text", b) for b in text_blocks]
+    for (rect, rows, ncols) in page_tables:
+        items.append((rect.y0, "table", (rows, ncols)))
+    items.sort(key=lambda x: x[0])
+
+    for (_, kind, data) in items:
+
+        if kind == "text":
+            block = data
+            for line in block["lines"]:
+                spans = [s for s in line["spans"] if s["text"].strip()]
+                if not spans:
+                    continue
+                full_text = "".join(s["text"] for s in spans).strip()
+                if not full_text:
+                    continue
+                first = spans[0]
+                size  = first["size"]
+                color = first["color"]
+
+                if size >= 26:
+                    p = document.add_paragraph(style="Heading 1")
+                    run = p.add_run(full_text)
+                    run.bold = True
+                    run.font.size = Pt(22)
+                    if color:
+                        run.font.color.rgb = _pdf_int_to_rgb(color)
+                elif size >= 13:
+                    p = document.add_paragraph(style="Heading 2")
+                    run = p.add_run(full_text)
+                    run.bold = True
+                    run.font.size = Pt(13)
+                    if color:
+                        run.font.color.rgb = _pdf_int_to_rgb(color)
+                else:
+                    p = document.add_paragraph()
+                    p.paragraph_format.space_after  = Pt(1)
+                    p.paragraph_format.space_before = Pt(0)
+                    _render_rich_spans(p, spans)
+
+        elif kind == "table":
+            rows, ncols = data
+
+            # PyMuPDF often splits "1.0 Rest shelter" across col0 ("1.0 Re") and
+            # col1 ("st shelter available"). Detect this: if EVERY col0 value is
+            # short (≤ 8 chars) AND col1 carries the rest, merge them.
+            col0_vals = [(r[0] or "").strip() for r in rows]
+            col1_vals = [(r[1] or "").strip() for r in rows]
+            # Check: col0 short AND (col0+col1 concatenated looks like one word)
+            split_detected = (
+                ncols >= 3
+                and all(len(v) <= 8 for v in col0_vals)
+                and any(
+                    v and col1_vals[i] and not v[-1].isspace()
+                    and not col1_vals[i][0].isupper()
+                    for i, v in enumerate(col0_vals)
+                )
+            )
+
+            # Fallback: if col0 max len is ≤ 6 (just a row number fragment), merge
+            if not split_detected and ncols >= 3:
+                split_detected = all(len(v) <= 6 for v in col0_vals)
+
+            if split_detected:
+                dcols = ncols - 1
+                t = document.add_table(rows=len(rows), cols=dcols)
+                t.style = "Table Grid"
+                for ri, row in enumerate(rows):
+                    c0 = (row[0] or "").rstrip()
+                    c1 = (row[1] or "").lstrip()
+                    # Join without space when split is mid-word (col0 doesn't end with space/digit)
+                    if c0 and c1 and not c0[-1].isspace() and c1 and not c1[0].isupper() and not c1[0].isdigit():
+                        merged = c0 + c1
+                    else:
+                        merged = (c0 + " " + c1).strip()
+                    display = [merged] + [row[c] or "" for c in range(2, ncols)]
+                    for ci, txt in enumerate(display[:dcols]):
+                        cell = t.cell(ri, ci)
+                        cell.text = ""
+                        p = cell.paragraphs[0]
+                        p.paragraph_format.space_after = Pt(1)
+                        run = p.add_run(txt)
+                        if ri == 0:
+                            run.bold = True
+                            run.font.size = Pt(9)
+                            _set_cell_bg(cell, "1859A9")
+                            run.font.color.rgb = RGBColor(255, 255, 255)
+                        else:
+                            run.font.size = Pt(9)
+                            if ri % 2 == 0:
+                                _set_cell_bg(cell, "EEF3FA")
+            else:
+                t = document.add_table(rows=len(rows), cols=ncols)
+                t.style = "Table Grid"
+                for ri, row in enumerate(rows):
+                    for ci in range(ncols):
+                        cell = t.cell(ri, ci)
+                        cell.text = ""
+                        p = cell.paragraphs[0]
+                        p.paragraph_format.space_after = Pt(1)
+                        run = p.add_run(row[ci] or "")
+                        if ri == 0:
+                            run.bold = True
+                            run.font.size = Pt(9)
+                            _set_cell_bg(cell, "1859A9")
+                            run.font.color.rgb = RGBColor(255, 255, 255)
+                        else:
+                            run.font.size = Pt(9)
+                            if ri % 2 == 0:
+                                _set_cell_bg(cell, "EEF3FA")
+
+            document.add_paragraph()  # breathing room after table
+
 
 @app.route("/api/pdf-to-word", methods=["POST"])
 def pdf_to_word():
+    from docx.shared import Cm
+
     files = get_uploaded_files()
     if not files:
         return jsonify({"error": "Upload a PDF file to convert."}), 400
@@ -344,22 +527,16 @@ def pdf_to_word():
 
     document = Document()
 
+    # Tighter margins to match typical PDF layout
+    for section in document.sections:
+        section.left_margin   = Cm(1.8)
+        section.right_margin  = Cm(1.8)
+        section.top_margin    = Cm(1.5)
+        section.bottom_margin = Cm(1.5)
+
     with fitz.open(stream=data, filetype="pdf") as doc:
         for page_index, page in enumerate(doc):
-            blocks = page.get_text("blocks")
-            # Sort blocks in natural reading order: top-to-bottom, left-to-right
-            blocks.sort(key=lambda b: (round(b[1], 1), round(b[0], 1)))
-
-            for b in blocks:
-                text = b[4].strip() if len(b) > 4 else ""
-                if not text:
-                    continue
-                for line in text.split("\n"):
-                    line = line.strip()
-                    if line:
-                        para = document.add_paragraph(line)
-                        para.style.font.size = Pt(11)
-
+            _convert_page_to_docx(page, document)
             if page_index < len(doc) - 1:
                 document.add_page_break()
 
