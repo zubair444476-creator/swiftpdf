@@ -4,7 +4,7 @@ import zipfile
 import uuid
 import base64
 
-from flask import Flask, request, send_file, jsonify, render_template
+from flask import Flask, request, send_file, jsonify, render_template, send_from_directory
 from werkzeug.utils import secure_filename
 
 import fitz  # pymupdf
@@ -25,7 +25,7 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.pdfgen import canvas as pdf_canvas
 
-app = Flask(__name__, static_folder="static", static_url_path="")
+app = Flask(__name__)
 
 MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50 MB
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
@@ -85,7 +85,7 @@ def parse_page_spec(spec: str, page_count: int):
 
 @app.route("/")
 def index():
-    return app.send_static_file("index.html")
+    return send_from_directory(".", "index.html")
 
 
 @app.route("/health")
