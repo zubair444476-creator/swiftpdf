@@ -1,14 +1,8 @@
 [phases.setup]
-nixPkgs = [
-  "tesseract",   # Tesseract OCR engine (includes English traineddata)
-  "wget",        # needed to download Arabic language pack
-]
-
-[phases.build]
-cmds = [
-  # Download Arabic traineddata so the 'ara' and 'ara+eng' lang options work
-  "mkdir -p /usr/share/tessdata",
-  "wget -q -O /usr/share/tessdata/ara.traineddata https://github.com/tesseract-ocr/tessdata_fast/raw/main/ara.traineddata || true",
+aptPkgs = [
+  "tesseract-ocr",      # Tesseract OCR engine
+  "tesseract-ocr-eng",  # English language pack
+  "tesseract-ocr-ara",  # Arabic language pack
 ]
 
 [phases.install]

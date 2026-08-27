@@ -1147,10 +1147,8 @@ def _ocr_image(pil_img, lang="eng"):
     Run Tesseract OCR on a PIL image.
     Raises RuntimeError with a user-friendly message if Tesseract is missing.
     """
-    import shutil, subprocess
-
-    tess_cmd = shutil.which("tesseract")
-    if not tess_cmd:
+    import shutil
+    if not shutil.which("tesseract"):
         raise RuntimeError(
             "Tesseract OCR is not installed on this server. "
             "Add nixpacks.toml with tesseract to your Railway project and redeploy."
@@ -1161,38 +1159,6 @@ def _ocr_image(pil_img, lang="eng"):
         raise RuntimeError(
             "pytesseract is missing. Add it to requirements.txt and redeploy."
         )
-
-    pytesseract.pytesseract.tesseract_cmd = tess_cmd
-
-    # Tell pytesseract where Railway puts tessdata (nix store path)
-    # Try to auto-detect from tesseract --version output if TESSDATA_PREFIX not set
-    import os
-    if not os.environ.get("TESSDATA_PREFIX"):
-        try:
-            out = subprocess.check_output([tess_cmd, "--version"],
-                                          stderr=subprocess.STDOUT).decode()
-            for line in out.splitlines():
-                if "tessdata" in line.lower() and os.path.isdir(line.strip()):
-                    os.environ["TESSDATA_PREFIX"] = line.strip()
-                    break
-        except Exception:
-            pass
-        # Fallback candidates
-        for candidate in ["/usr/share/tessdata", "/usr/share/tesseract-ocr/5/tessdata",
-                          "/usr/share/tesseract-ocr/4.00/tessdata"]:
-            if os.path.isdir(candidate):
-                os.environ.setdefault("TESSDATA_PREFIX", candidate)
-                break
-
-    # If the requested lang pack is missing, fall back to English gracefully
-    tessdata_dir = os.environ.get("TESSDATA_PREFIX", "")
-    if lang != "eng" and tessdata_dir:
-        for part in lang.split("+"):
-            tdata = os.path.join(tessdata_dir, f"{part}.traineddata")
-            if not os.path.isfile(tdata):
-                lang = "eng"   # fall back rather than crash
-                break
-
     # Upscale tiny images — Tesseract is much more accurate at ≥ ~200 DPI
     w, h = pil_img.size
     if max(w, h) < 1200:
