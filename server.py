@@ -332,6 +332,9 @@ def pdf_to_text():
 # PDF -> Word (.docx)  — rich conversion preserving headings, tables, formatting
 # ---------------------------------------------------------------------------
 
+# This is the replacement for the pdf_to_word route in server.py
+# Replace everything from line 335 to line 654 with this content
+
 def _pdf_rgb(color_int):
     """PyMuPDF integer color → docx RGBColor."""
     from docx.shared import RGBColor
@@ -352,7 +355,7 @@ def _set_cell_shading(cell, hex_fill):
     tcPr.append(shd)
 
 
-def _set_table_borders(table, color="AAAAAA", sz="4"):
+def _set_table_borders(table, color="B0C4D8", sz="4"):
     from docx.oxml.ns import qn
     from docx.oxml import OxmlElement
     tbl = table._tbl
@@ -367,49 +370,91 @@ def _set_table_borders(table, color="AAAAAA", sz="4"):
     tblPr.append(borders)
 
 
-def _detect_col_boundaries(text_blocks):
+def _set_cell_border(cell, color="B0C4D8", sz="4"):
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    tcBorders = OxmlElement("w:tcBorders")
+    for side in ("top", "left", "bottom", "right"):
+        el = OxmlElement(f"w:{side}")
+        el.set(qn("w:val"), "single")
+        el.set(qn("w:sz"), sz)
+        el.set(qn("w:color"), color)
+        tcBorders.append(el)
+    tcPr.append(tcBorders)
+
+
+def _add_image_para(document, img_bytes, width_cm):
+    """Add an image as a paragraph with no spacing."""
+    from docx.shared import Cm, Pt
+    p = document.add_paragraph()
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after = Pt(0)
+    run = p.add_run()
+    run.add_picture(io.BytesIO(img_bytes), width=Cm(width_cm))
+    return p
+
+
+def _clip_page_region(page, rect, zoom=3.0):
+    """Render a rectangular region of a PDF page as PNG bytes."""
+    mat = fitz.Matrix(zoom, zoom)
+    pix = page.get_pixmap(matrix=mat, clip=rect)
+    return pix.tobytes("png")
+
+
+def _detect_table_regions(page):
     """
-    Adaptively detect column X-boundaries from the actual text block left-edges.
-    A new cluster starts whenever there is a gap > 15 pt between positions.
-    Returns a sorted list of X midpoint thresholds between clusters.
+    Find table bounding boxes on the page using PyMuPDF's find_tables.
+    Returns list of fitz.Rect.
     """
+    table_rects = []
+    try:
+        found = page.find_tables()
+        for ft in found.tables:
+            raw = ft.extract()
+            ncols = max(len(r) for r in raw) if raw else 0
+            flat = [c for r in raw for c in r if c and str(c).strip()]
+            w = ft.bbox[2] - ft.bbox[0]
+            if len(raw) >= 2 and ncols >= 2 and len(flat) >= 2 and w < page.rect.width - 5:
+                table_rects.append(fitz.Rect(ft.bbox))
+    except Exception:
+        pass
+    return table_rects
+
+
+def _extract_table_data(page, table_rect):
+    """
+    Extract table content from a page region.
+    Returns list of rows, each row is a list of cell text strings.
+    Also detects header row background color.
+    """
+    blocks = page.get_text("dict")["blocks"]
+    y_min, y_max = table_rect.y0, table_rect.y1
+    x_min, x_max = table_rect.x0, table_rect.x1
+
+    text_blocks = [
+        b for b in blocks
+        if b.get("type") == 0
+        and (y_min - 5) <= b["bbox"][1] <= (y_max + 5)
+        and b["bbox"][0] >= (x_min - 8)
+        and b["bbox"][2] <= (x_max + 8)
+    ]
     if not text_blocks:
-        return []
+        return [], None, None
+
+    text_blocks.sort(key=lambda b: (round(b["bbox"][1] / 4) * 4, b["bbox"][0]))
+
+    # Detect column boundaries
     x_lefts = sorted(set(round(b["bbox"][0]) for b in text_blocks))
-    if len(x_lefts) <= 1:
-        return []
     GAP = 15
     clusters = [[x_lefts[0]]]
     for x in x_lefts[1:]:
         if x - clusters[-1][-1] > GAP:
             clusters.append([])
         clusters[-1].append(x)
-    if len(clusters) <= 1:
-        return []
-    # Boundary = midpoint between last of cluster[i] and first of cluster[i+1]
-    return [(clusters[i][-1] + clusters[i + 1][0]) / 2.0
-            for i in range(len(clusters) - 1)]
-
-
-def _extract_table_rows_adaptive(page, y_min, y_max, table_bbox, is_first_table_on_doc):
-    """
-    Extract table rows using adaptive column detection — works for any PDF table,
-    any number of columns, without hard-coded pixel offsets.
-    """
-    blocks = page.get_text("dict")["blocks"]
-    text_blocks = [
-        b for b in blocks
-        if b.get("type") == 0
-        and (y_min - 4) <= b["bbox"][1] <= (y_max + 4)
-        and b["bbox"][0] >= (table_bbox[0] - 8)
-        and b["bbox"][2] <= (table_bbox[2] + 8)
-    ]
-    if not text_blocks:
-        return []
-
-    text_blocks.sort(key=lambda b: (round(b["bbox"][1] / 4) * 4, b["bbox"][0]))
-    boundaries = _detect_col_boundaries(text_blocks)
-    ncols = len(boundaries) + 1
+    ncols = len(clusters)
+    boundaries = [(clusters[i][-1] + clusters[i+1][0]) / 2.0 for i in range(len(clusters)-1)]
 
     def col_index(x0):
         for i, bnd in enumerate(boundaries):
@@ -423,65 +468,140 @@ def _extract_table_rows_adaptive(page, y_min, y_max, table_bbox, is_first_table_
         y_groups.setdefault(y_key, []).append(b)
 
     rows = []
+    first_row_spans = None
     for yi, y_key in enumerate(sorted(y_groups.keys())):
         cols_text = [""] * ncols
+        cols_spans = [[] for _ in range(ncols)]
         for b in y_groups[y_key]:
-            x0 = b["bbox"][0]
-            ci = col_index(x0)
+            ci = col_index(b["bbox"][0])
             for line in b["lines"]:
                 spans = [s for s in line["spans"] if s["text"].strip()]
                 if not spans:
                     continue
                 txt = "".join(s["text"] for s in spans).strip()
-                if not txt:
-                    continue
                 sep = " " if cols_text[ci] else ""
                 cols_text[ci] = cols_text[ci] + sep + txt
-
+                cols_spans[ci].extend(spans)
         if not any(c.strip() for c in cols_text):
             continue
-        row_type = "header" if (yi == 0 and is_first_table_on_doc) else "data"
-        rows.append((row_type, *cols_text))
-    return rows
+        if yi == 0:
+            first_row_spans = cols_spans
+        rows.append(cols_text)
+
+    # Detect header fill color
+    hdr_fill = "2F5496"
+    try:
+        row_top = table_rect.y0
+        candidates = []
+        for d in page.get_drawings():
+            r = d.get("rect")
+            if r is None:
+                continue
+            f = d.get("fill")
+            if not f or f in ((1.0, 1.0, 1.0), (0.0, 0.0, 0.0)):
+                continue
+            if r.y0 <= row_top + 25 and r.y1 >= row_top:
+                area = max(0, min(r.x1, table_rect.x1) - max(r.x0, table_rect.x0))
+                candidates.append((area, f))
+        if candidates:
+            _, best = max(candidates, key=lambda x: x[0])
+            hdr_fill = f"{int(best[0]*255):02X}{int(best[1]*255):02X}{int(best[2]*255):02X}"
+    except Exception:
+        pass
+
+    # Detect header text color from first row
+    hdr_txt_color = None
+    if first_row_spans:
+        for spans in first_row_spans:
+            for sp in spans:
+                if sp.get("color", 0) != 0:
+                    hdr_txt_color = sp["color"]
+                    break
+            if hdr_txt_color is not None:
+                break
+
+    return rows, hdr_fill, hdr_txt_color
 
 
-def _header_color_from_page(page, table_rect):
-    """Sample the header-row fill colour from the PDF vector drawings."""
-    row_top = table_rect.y0
-    candidates = []
-    for d in page.get_drawings():
-        r = d.get("rect")
-        if r is None:
-            continue
-        f = d.get("fill")
-        if not f or f in ((1.0, 1.0, 1.0), (0.0, 0.0, 0.0)):
-            continue
-        if r.y0 <= row_top + 20 and r.y1 >= row_top:
-            area = max(0, min(r.x1, table_rect.x1) - max(r.x0, table_rect.x0))
-            candidates.append((area, f))
-    if not candidates:
+def _build_word_table(document, rows, hdr_fill, hdr_txt_color, usable_cm=18.0):
+    """Build an editable Word table from extracted row data."""
+    from docx.shared import Cm, Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+
+    if not rows:
         return None
-    _, best = max(candidates, key=lambda x: x[0])
-    return f"{int(best[0]*255):02X}{int(best[1]*255):02X}{int(best[2]*255):02X}"
 
+    ncols = max(len(r) for r in rows)
+    rows = [r + [""] * (ncols - len(r)) for r in rows]
 
-def _spans_to_runs(paragraph, spans):
-    """Render rich PyMuPDF spans into a docx paragraph with formatting."""
-    for span in spans:
-        txt = span["text"]
-        if not txt:
-            continue
-        run = paragraph.add_run(txt)
-        run.bold   = bool(span["flags"] & 16)
-        run.italic = bool(span["flags"] & 2)
-        run.font.size = Pt(max(6, span["size"]))
-        if span["color"]:
-            run.font.color.rgb = _pdf_rgb(span["color"])
+    # Column widths: give second col extra if 4 cols (SR#, Observation, Y/N, Remarks pattern)
+    if ncols == 4:
+        col_widths = [1.5, usable_cm - 1.5 - 2.0 - 5.0, 2.0, 5.0]
+        col_widths[1] = max(4.0, col_widths[1])
+    elif ncols == 3:
+        col_widths = [1.5, usable_cm - 1.5 - 4.0, 4.0]
+    else:
+        each = usable_cm / ncols
+        col_widths = [each] * ncols
+        if ncols >= 3:
+            bonus = min(3.0, usable_cm * 0.2)
+            col_widths[1] += bonus
+            share = bonus / (ncols - 1)
+            for i in [0] + list(range(2, ncols)):
+                col_widths[i] = max(1.0, col_widths[i] - share / (ncols-1))
+
+    t = document.add_table(rows=len(rows), cols=ncols)
+    t.alignment = WD_TABLE_ALIGNMENT.LEFT
+    _set_table_borders(t, color="B0C4D8", sz="4")
+
+    for ri, row_data in enumerate(rows):
+        is_hdr = (ri == 0)
+        for ci, txt in enumerate(row_data):
+            cell = t.cell(ri, ci)
+            try:
+                cell.width = Cm(col_widths[ci])
+            except Exception:
+                pass
+            _set_cell_shading(cell, hdr_fill if is_hdr else "FFFFFF")
+            _set_cell_border(cell, "B0C4D8", "4")
+            cell.text = ""
+            p = cell.paragraphs[0]
+            p.paragraph_format.space_before = Pt(2)
+            p.paragraph_format.space_after = Pt(2)
+
+            lines = (txt or "").split("\n")
+            for li, line in enumerate(lines):
+                if li > 0:
+                    p.add_run().add_break()
+                run = p.add_run(line)
+                run.font.size = Pt(8 if is_hdr else 9)
+                if is_hdr:
+                    run.bold = True
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    if hdr_txt_color:
+                        run.font.color.rgb = _pdf_rgb(hdr_txt_color)
+                    else:
+                        run.font.color.rgb = RGBColor(255, 255, 255)
+                else:
+                    run.font.color.rgb = RGBColor(0, 0, 0)
+                    # Bold SR# cells (e.g. "1.0", "2.0")
+                    if ci == 0 and txt.strip() and "." in txt:
+                        run.bold = True
+    return t
 
 
 @app.route("/api/pdf-to-word", methods=["POST"])
 def pdf_to_word():
-    from docx.shared import Cm, RGBColor
+    """
+    PDF → Word conversion.
+    Strategy:
+    - Detect table regions on each page.
+    - Render non-table areas (header, footer, decorative graphics) as images.
+    - Insert editable Word tables for the data portions.
+    - This gives near pixel-perfect visual fidelity + editable cells.
+    """
+    from docx.shared import Cm, Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.enum.table import WD_TABLE_ALIGNMENT
 
@@ -497,151 +617,76 @@ def pdf_to_word():
     for section in document.sections:
         section.page_width    = Cm(21)
         section.page_height   = Cm(29.7)
-        section.left_margin   = Cm(1.5)
-        section.right_margin  = Cm(1.5)
-        section.top_margin    = Cm(1.2)
-        section.bottom_margin = Cm(1.2)
+        section.left_margin   = Cm(0.5)
+        section.right_margin  = Cm(0.5)
+        section.top_margin    = Cm(0.3)
+        section.bottom_margin = Cm(0.3)
 
     normal_style = document.styles["Normal"]
     normal_style.paragraph_format.space_after  = Pt(0)
     normal_style.paragraph_format.space_before = Pt(0)
 
-    first_table_placed = False
+    PAGE_W_CM = 20.0   # usable width after margins
+    ZOOM = 3.0         # render quality
 
     with fitz.open(stream=data, filetype="pdf") as doc:
         for page_index, page in enumerate(doc):
             if page_index > 0:
                 document.add_page_break()
 
-            # ── 1. Detect genuine data tables ────────────────────────────────
-            table_rects = []
-            try:
-                found = page.find_tables()
-                for ft in found.tables:
-                    raw   = ft.extract()
-                    ncols = max(len(r) for r in raw) if raw else 0
-                    flat  = [c for r in raw for c in r if c and str(c).strip()]
-                    w     = ft.bbox[2] - ft.bbox[0]
-                    # Must be a real data table, not a full-page layout frame
-                    if len(raw) >= 3 and ncols >= 2 and len(flat) >= 4 and w < page.rect.width - 10:
-                        table_rects.append(fitz.Rect(ft.bbox))
-            except Exception:
-                pass
+            page_rect = page.rect   # full page bounds
+            table_rects = _detect_table_regions(page)
 
-            def in_any_table(bbox):
-                r = fitz.Rect(bbox)
-                return any(r.intersects(tr) for tr in table_rects)
+            if not table_rects:
+                # No tables found — render whole page as image (fallback)
+                full_img = _clip_page_region(page, page_rect, zoom=2.5)
+                _add_image_para(document, full_img, PAGE_W_CM)
+                continue
 
-            # ── 2. Text outside tables ───────────────────────────────────────
-            raw_blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
-            text_blocks = [
-                b for b in raw_blocks
-                if b.get("type") == 0 and not in_any_table(b["bbox"])
-            ]
-            text_blocks.sort(key=lambda b: (round(b["bbox"][1] / 4) * 4, b["bbox"][0]))
+            # Sort tables top-to-bottom
+            table_rects.sort(key=lambda r: r.y0)
 
-            for block in text_blocks:
-                for line in block["lines"]:
-                    spans = [s for s in line["spans"] if s["text"].strip()]
-                    if not spans:
-                        continue
-                    full_text = "".join(s["text"] for s in spans).strip()
-                    if not full_text:
-                        continue
-                    first = spans[0]
-                    size  = first["size"]
-                    color = first["color"]
-                    if size >= 24:
-                        p = document.add_paragraph(style="Heading 1")
-                        run = p.add_run(full_text)
-                        run.bold = True
-                        run.font.size = Pt(min(size, 28))
-                        if color:
-                            run.font.color.rgb = _pdf_rgb(color)
-                    elif size >= 13:
-                        p = document.add_paragraph(style="Heading 2")
-                        run = p.add_run(full_text)
-                        run.bold = True
-                        run.font.size = Pt(min(size, 14))
-                        if color:
-                            run.font.color.rgb = _pdf_rgb(color)
-                    else:
-                        p = document.add_paragraph()
-                        p.paragraph_format.space_after  = Pt(1)
-                        p.paragraph_format.space_before = Pt(0)
-                        _spans_to_runs(p, spans)
+            # Build a list of regions: alternating image strips and table zones
+            # Each item: ("image", y0, y1) or ("table", rect)
+            regions = []
+            cursor_y = page_rect.y0
 
-            # ── 3. Render tables with adaptive column detection ───────────────
             for tr in table_rects:
-                is_first = not first_table_placed
-                rows = _extract_table_rows_adaptive(
-                    page, tr.y0, tr.y1, tr, is_first_table_on_doc=is_first
-                )
-                if not rows:
-                    continue
-                first_table_placed = True
+                # Gap before this table → image strip
+                gap_y0 = cursor_y
+                gap_y1 = tr.y0
+                if gap_y1 > gap_y0 + 2:
+                    regions.append(("image", gap_y0, gap_y1))
+                regions.append(("table", tr))
+                cursor_y = tr.y1
 
-                header_row = None
-                data_rows  = []
-                for r in rows:
-                    if r[0] == "header":
-                        header_row = list(r[1:])
+            # Remaining area after last table → image strip (footer)
+            if cursor_y < page_rect.y1 - 2:
+                regions.append(("image", cursor_y, page_rect.y1))
+
+            # Render each region
+            for region in regions:
+                if region[0] == "image":
+                    _, y0, y1 = region
+                    clip = fitz.Rect(page_rect.x0, y0, page_rect.x1, y1)
+                    img_bytes = _clip_page_region(page, clip, zoom=ZOOM)
+                    _add_image_para(document, img_bytes, PAGE_W_CM)
+
+                elif region[0] == "table":
+                    tr = region[1]
+                    rows, hdr_fill, hdr_txt_color = _extract_table_data(page, tr)
+                    if rows:
+                        sp = document.add_paragraph()
+                        sp.paragraph_format.space_before = Pt(2)
+                        sp.paragraph_format.space_after = Pt(2)
+                        _build_word_table(document, rows, hdr_fill, hdr_txt_color, usable_cm=PAGE_W_CM)
+                        sp2 = document.add_paragraph()
+                        sp2.paragraph_format.space_before = Pt(2)
+                        sp2.paragraph_format.space_after = Pt(2)
                     else:
-                        data_rows.append(list(r[1:]))
-
-                if not header_row and not data_rows:
-                    continue
-
-                all_rows = ([header_row] if header_row else []) + data_rows
-                ncols    = max(len(r) for r in all_rows)
-                # Pad every row to ncols columns
-                all_rows = [r + [""] * (ncols - len(r)) for r in all_rows]
-
-                # Distribute column widths; give extra room to the first (widest) col
-                usable_cm  = 18.0
-                col_w_each = round(usable_cm / ncols, 2)
-                col_w      = [col_w_each] * ncols
-                if ncols >= 3:
-                    bonus = min(4.0, usable_cm * 0.25)
-                    col_w[0] += bonus
-                    share = bonus / (ncols - 1)
-                    for i in range(1, ncols):
-                        col_w[i] = max(1.0, col_w[i] - share)
-
-                # Pick up the actual header background colour from the PDF drawings
-                hdr_fill = _header_color_from_page(page, tr) or "2F5496"
-
-                t = document.add_table(rows=len(all_rows), cols=ncols)
-                t.alignment = WD_TABLE_ALIGNMENT.LEFT
-                _set_table_borders(t, color="AAAAAA", sz="4")
-
-                for ci, col in enumerate(t.columns):
-                    col.width = Cm(col_w[ci])
-
-                for ri, row_data in enumerate(all_rows):
-                    is_hdr = (ri == 0 and header_row is not None)
-                    bg     = hdr_fill if is_hdr else "FFFFFF"
-
-                    for ci in range(ncols):
-                        txt  = (row_data[ci] if ci < len(row_data) else "") or ""
-                        cell = t.cell(ri, ci)
-                        cell.width = Cm(col_w[ci])
-                        _set_cell_shading(cell, bg)
-                        cell.text = ""
-                        p = cell.paragraphs[0]
-                        p.paragraph_format.space_after  = Pt(1)
-                        p.paragraph_format.space_before = Pt(1)
-                        if is_hdr:
-                            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                        run = p.add_run(txt)
-                        run.font.size = Pt(9)
-                        if is_hdr:
-                            run.bold = True
-                            run.font.color.rgb = RGBColor(255, 255, 255)
-                        else:
-                            run.font.color.rgb = RGBColor(0, 0, 0)
-
-                document.add_paragraph()
+                        # Table extraction failed — render as image
+                        img_bytes = _clip_page_region(page, tr, zoom=ZOOM)
+                        _add_image_para(document, img_bytes, PAGE_W_CM)
 
     buf = io.BytesIO()
     document.save(buf)
@@ -652,6 +697,7 @@ def pdf_to_word():
         f"{base_name}.docx",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
+
 
 
 # ---------------------------------------------------------------------------
