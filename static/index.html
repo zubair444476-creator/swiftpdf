@@ -121,18 +121,20 @@
   .thumb-item.remove-marked { border-color: var(--danger) !important; background: rgba(224,92,110,.08); }
   .thumb-item.remove-marked .thumb-label { background: rgba(224,92,110,.7); }
 
-  /* ✕ delete button on each thumb */
-  .thumb-delete-btn {
+  /* ✕ shown via CSS ::after — no button element, no event interference */
+  .thumb-item.remove-mode::after {
+    content: "\2715";
     position: absolute; top: 5px; right: 5px;
     width: 22px; height: 22px;
-    background: var(--danger); border: none; border-radius: 50%;
+    background: var(--danger); border-radius: 50%;
     color: #fff; font-size: 12px; font-weight: 700;
     display: flex; align-items: center; justify-content: center;
-    cursor: pointer; opacity: 0; transition: opacity .15s;
-    z-index: 2; line-height: 1;
+    opacity: 0; transition: opacity .15s;
+    z-index: 2; line-height: 22px; text-align: center;
+    pointer-events: none;
   }
-  .thumb-item:hover .thumb-delete-btn { opacity: 1; }
-  .thumb-delete-btn:hover { background: #c0392b; }
+  .thumb-item.remove-mode:hover::after { opacity: 1; }
+  .thumb-item.remove-marked::after { opacity: 1; background: #c0392b; }
 
   /* checkmark badge for extract/organize mode */
   .thumb-check {
@@ -656,6 +658,8 @@ function applyRemoveStyle(div, isMarked) {
   } else {
     div.classList.remove("selected", "remove-marked");
   }
+  // always keep remove-mode class (shows ✕ on hover via CSS)
+  div.classList.add("remove-mode");
 }
 
 function renderThumbGrid() {
@@ -667,7 +671,7 @@ function renderThumbGrid() {
   thumbOrder.forEach((item, idx) => {
     const div = document.createElement("div");
     const isRemoveMode = tool && tool.thumbMode === "remove";
-    div.className = "thumb-item" + (item.selected && !isRemoveMode ? " selected" : "") + (item.selected && isRemoveMode ? " selected remove-marked" : "");
+    div.className = "thumb-item" + (isRemoveMode ? " remove-mode" : "") + (item.selected && !isRemoveMode ? " selected" : "") + (item.selected && isRemoveMode ? " selected remove-marked" : "");
     div.dataset.idx = idx;
 
     // Page image
@@ -719,20 +723,15 @@ function renderThumbGrid() {
       });
 
     } else {
-      // REMOVE mode: single click on the whole card (✕ button has pointer-events:none)
+      // REMOVE mode: click anywhere on card toggles deletion mark
+      // ✕ is shown via CSS ::after — no DOM button = no event capture issues
+      div.classList.add("remove-mode");
       div.addEventListener("click", () => {
         const i = parseInt(div.dataset.idx, 10);
         thumbOrder[i].selected = !thumbOrder[i].selected;
         applyRemoveStyle(div, thumbOrder[i].selected);
         updateThumbCount();
       });
-
-      const delBtn = document.createElement("button");
-      delBtn.className = "thumb-delete-btn";
-      delBtn.title = "Mark for removal";
-      delBtn.innerHTML = "&#x2715;";
-      delBtn.style.pointerEvents = "none"; // clicks fall through to card div
-      div.appendChild(delBtn);
     }
 
     gridEl.appendChild(div);
@@ -797,6 +796,7 @@ async function submitTool() {
 
   if (tool.useThumbs) {
     const spec = buildPageSpec();
+    console.log("[SwiftPDF] thumbMode:", tool.thumbMode, "| spec:", spec, "| thumbOrder:", JSON.stringify(thumbOrder.map(t=>({p:t.page,sel:t.selected}))));
     if (!spec) {
       setStatus(
         tool.thumbMode === "remove"
