@@ -218,8 +218,19 @@
   .thumb-selected-count { font-size: 0.82rem; color: var(--accent2); margin-top: 8px; font-weight: 600; }
 
   /* Drag-to-reorder */
-  .thumb-item.dragging { opacity: 0.35; border-color: var(--accent2); }
-  .thumb-item.drag-target { border-color: var(--success); }
+  .thumb-item.dragging { opacity: 0.25; border-color: var(--accent2); transform: scale(0.95); }
+  .thumb-item { transition: transform 0.18s ease, opacity 0.18s ease, border-color 0.15s, box-shadow 0.15s; }
+  .thumb-item.dragging { pointer-events: none; }
+  .thumb-item.drop-before {
+    transform: translateX(12px) scale(1.02);
+    border-left: 3px solid var(--success);
+    box-shadow: -6px 0 14px rgba(76,175,137,0.35);
+  }
+  .thumb-item.drop-after {
+    transform: translateX(-12px) scale(1.02);
+    border-right: 3px solid var(--success);
+    box-shadow: 6px 0 14px rgba(76,175,137,0.35);
+  }
 
   /* ── Buttons ── */
   .btn {
@@ -826,22 +837,82 @@ function renderThumbGrid() {
         updateThumbCount();
       });
 
-      // Drag-to-reorder
+      // Drag-to-reorder with live card-shifting
       div.draggable = true;
+
       div.addEventListener("dragstart", e => {
-        thumbDragSrcIdx = idx;
-        div.classList.add("dragging");
+        thumbDragSrcIdx = parseInt(div.dataset.idx, 10);
         e.dataTransfer.effectAllowed = "move";
+        // Delay adding dragging class so ghost image renders normally
+        requestAnimationFrame(() => div.classList.add("dragging"));
       });
-      div.addEventListener("dragend",  () => div.classList.remove("dragging"));
-      div.addEventListener("dragover", e => { e.preventDefault(); div.classList.add("drag-target"); });
-      div.addEventListener("dragleave",() => div.classList.remove("drag-target"));
+
+      div.addEventListener("dragend", () => {
+        // Clean up all shift indicators
+        document.querySelectorAll(".thumb-item").forEach(el => {
+          el.classList.remove("dragging", "drop-before", "drop-after");
+        });
+        thumbDragSrcIdx = null;
+      });
+
+      div.addEventListener("dragover", e => {
+        e.preventDefault();
+        if (thumbDragSrcIdx === null) return;
+        const targetIdx = parseInt(div.dataset.idx, 10);
+        if (targetIdx === thumbDragSrcIdx) return;
+
+        // Clear all indicators first
+        document.querySelectorAll(".thumb-item").forEach(el => {
+          el.classList.remove("drop-before", "drop-after");
+        });
+
+        // Determine if dragging left-to-right or right-to-left
+        // and shift neighbours to visually open a gap
+        const rect = div.getBoundingClientRect();
+        const midX = rect.left + rect.width / 2;
+        const insertBefore = e.clientX < midX;
+
+        // Shift the target card and its neighbours
+        if (insertBefore) {
+          div.classList.add("drop-before");
+          const prev = div.previousElementSibling;
+          if (prev && !prev.classList.contains("dragging")) prev.classList.add("drop-after");
+        } else {
+          div.classList.add("drop-after");
+          const next = div.nextElementSibling;
+          if (next && !next.classList.contains("dragging")) next.classList.add("drop-before");
+        }
+      });
+
+      div.addEventListener("dragleave", e => {
+        // Only clear if leaving to a non-thumb element
+        if (!e.relatedTarget || !e.relatedTarget.closest(".thumb-item")) {
+          document.querySelectorAll(".thumb-item").forEach(el => {
+            el.classList.remove("drop-before", "drop-after");
+          });
+        }
+      });
+
       div.addEventListener("drop", e => {
         e.preventDefault();
-        div.classList.remove("drag-target");
-        if (thumbDragSrcIdx === null || thumbDragSrcIdx === idx) return;
-        const [moved] = thumbOrder.splice(thumbDragSrcIdx, 1);
-        thumbOrder.splice(idx, 0, moved);
+        document.querySelectorAll(".thumb-item").forEach(el => {
+          el.classList.remove("drop-before", "drop-after");
+        });
+        const srcIdx = thumbDragSrcIdx;
+        const targetIdx = parseInt(div.dataset.idx, 10);
+        if (srcIdx === null || srcIdx === targetIdx) return;
+
+        const rect = div.getBoundingClientRect();
+        const insertBefore = e.clientX < rect.left + rect.width / 2;
+
+        const [moved] = thumbOrder.splice(srcIdx, 1);
+        // Recalculate target index after splice
+        let insertAt = parseInt(div.dataset.idx, 10);
+        if (srcIdx < insertAt) insertAt--; // account for splice shift
+        if (!insertBefore) insertAt++;
+        insertAt = Math.max(0, Math.min(insertAt, thumbOrder.length));
+        thumbOrder.splice(insertAt, 0, moved);
+
         thumbDragSrcIdx = null;
         renderThumbGrid();
         updateThumbCount();
