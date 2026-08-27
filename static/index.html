@@ -388,6 +388,21 @@
     </div>
   </div>
 
+  <!-- OCR -->
+  <div class="section-title">OCR — Extract Text from Images</div>
+  <div class="grid">
+    <div class="card" onclick="openTool('image-to-ocr-txt')">
+      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/><path d="M7 13h4"/><path d="M7 17h4"/><path d="M14 13h3"/><path d="M14 17h3"/></svg></div>
+      <div class="card-name">Image to Text (OCR)</div>
+      <div class="card-desc">Scan JPG, PNG, or TIFF images and extract all text as a .txt file</div>
+    </div>
+    <div class="card" onclick="openTool('image-to-ocr-docx')">
+      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13l2 6 2-4 2 4 2-6"/></svg></div>
+      <div class="card-name">Image to Word (OCR)</div>
+      <div class="card-desc">Scan images and save the extracted text as an editable .docx file</div>
+    </div>
+  </div>
+
   <!-- CONVERT TO PDF -->
   <div class="section-title">Convert to PDF</div>
   <div class="grid">
@@ -598,6 +613,38 @@ const TOOLS = {
   "excel-to-pdf": {
     title: "Excel to PDF", desc: "Convert an .xlsx spreadsheet to PDF. Each sheet becomes a table.",
     endpoint: "/api/excel-to-pdf", accept: ".xlsx", hint: "Accepts: .xlsx file",
+  },
+  "image-to-ocr-txt": {
+    title: "Image to Text (OCR)",
+    desc: "Upload one or more images. Tesseract OCR will read the text and save it as a .txt file. Works best on clear, high-resolution scans.",
+    endpoint: "/api/image-to-ocr", accept: ".jpg,.jpeg,.png,.bmp,.tiff,.tif,.webp", multi: true,
+    hint: "Accepts: JPG, PNG, BMP, TIFF, WebP",
+    fields: [
+      { id: "output_format", label: "Output format", type: "select", options: [
+        { value: "txt",  label: "Plain text (.txt)" },
+      ]},
+      { id: "lang", label: "Document language", type: "select", options: [
+        { value: "eng", label: "English" },
+        { value: "ara", label: "Arabic" },
+        { value: "ara+eng", label: "Arabic + English (mixed)" },
+      ]},
+    ],
+  },
+  "image-to-ocr-docx": {
+    title: "Image to Word (OCR)",
+    desc: "Upload one or more images. Tesseract OCR will read the text and save it as an editable .docx Word file. Works best on clear, high-resolution scans.",
+    endpoint: "/api/image-to-ocr", accept: ".jpg,.jpeg,.png,.bmp,.tiff,.tif,.webp", multi: true,
+    hint: "Accepts: JPG, PNG, BMP, TIFF, WebP",
+    fields: [
+      { id: "output_format", label: "Output format", type: "select", options: [
+        { value: "docx", label: "Word document (.docx)" },
+      ]},
+      { id: "lang", label: "Document language", type: "select", options: [
+        { value: "eng", label: "English" },
+        { value: "ara", label: "Arabic" },
+        { value: "ara+eng", label: "Arabic + English (mixed)" },
+      ]},
+    ],
   },
 };
 
