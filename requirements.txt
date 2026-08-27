@@ -1,0 +1,9 @@
+flask
+gunicorn
+pymupdf
+pillow
+python-docx
+openpyxl
+python-pptx
+reportlab
+werkzeug
