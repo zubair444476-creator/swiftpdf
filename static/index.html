@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SwiftPDF — Every PDF tool you need</title>
+<style>
+  :root {
+    --brand: #2f7d4f;
+    --brand-dark: #1f5c38;
+    --bg: #f6f8f7;
+    --card: #ffffff;
+    --text: #1c2b22;
+    --muted: #5f7267;
+    --border: #e1e8e3;
+    --danger: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    background: var(--brand);
+    color: white;
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header .logo {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  header .logo span { color: #d9f2e2; }
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 20px 80px;
+  }
+  .hero {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .hero h1 {
+    font-size: 34px;
+    margin-bottom: 8px;
+  }
+  .hero p {
+    color: var(--muted);
+    font-size: 16px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 18px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(47, 125, 79, 0.12);
+    border-color: var(--brand);
+  }
+  .card .icon { font-size: 30px; margin-bottom: 10px; }
+  .card h3 { margin: 0 0 6px; font-size: 17px; }
+  .card p { margin: 0; color: var(--muted); font-size: 13px; }
+
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 30, 24, 0.5);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 50;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--card);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 520px;
+    padding: 28px;
+    position: relative;
+  }
+  .modal h2 { margin-top: 0; }
+  .modal .close-btn {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 30px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    margin-bottom: 16px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .dropzone.dragover {
+    border-color: var(--brand);
+    background: #f0f9f3;
+  }
+  .file-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 16px;
+    max-height: 140px;
+    overflow-y: auto;
+  }
+  .file-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: #f0f4f1;
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .options { margin-bottom: 16px; }
+  .options label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 6px; }
+  select, input[type="number"] {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .primary-btn {
+    width: 100%;
+    background: var(--brand);
+    color: white;
+    border: none;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .primary-btn:disabled { background: #9bbfa9; cursor: not-allowed; }
+  .primary-btn:hover:not(:disabled) { background: var(--brand-dark); }
+  .status { margin-top: 12px; font-size: 13px; min-height: 18px; }
+  .status.error { color: var(--danger); }
+  .status.success { color: var(--brand-dark); }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 20px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Swift<span>PDF</span></div>
+  <div style="font-size:13px; opacity:0.9;">Free online PDF tools</div>
+</header>
+
+<main>
+  <div class="hero">
+    <h1>Every PDF tool you need, in one place</h1>
+    <p>Merge, split, compress, rotate and convert your PDFs — fast and free.</p>
+  </div>
+
+  <div class="grid" id="toolGrid">
+    <div class="card" data-tool="merge">
+      <div class="icon">🧩</div>
+      <h3>Merge PDF</h3>
+      <p>Combine multiple PDFs into one document.</p>
+    </div>
+    <div class="card" data-tool="split">
+      <div class="icon">✂️</div>
+      <h3>Split PDF</h3>
+      <p>Extract every page as its own PDF file.</p>
+    </div>
+    <div class="card" data-tool="compress">
+      <div class="icon">📦</div>
+      <h3>Compress PDF</h3>
+      <p>Shrink file size while keeping good quality.</p>
+    </div>
+    <div class="card" data-tool="rotate">
+      <div class="icon">🔄</div>
+      <h3>Rotate PDF</h3>
+      <p>Fix sideways or upside-down pages.</p>
+    </div>
+    <div class="card" data-tool="images-to-pdf">
+      <div class="icon">🖼️</div>
+      <h3>Images to PDF</h3>
+      <p>Turn JPG or PNG images into one PDF.</p>
+    </div>
+    <div class="card" data-tool="pdf-to-images">
+      <div class="icon">📸</div>
+      <h3>PDF to Images</h3>
+      <p>Export each page as a high-res PNG.</p>
+    </div>
+    <div class="card" data-tool="pdf-to-text">
+      <div class="icon">📄</div>
+      <h3>PDF to Text</h3>
+      <p>Extract all readable text from a PDF.</p>
+    </div>
+  </div>
+</main>
+
+<footer>SwiftPDF — files are processed and returned directly; nothing is stored.</footer>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <button class="close-btn" id="closeModal">✕</button>
+    <h2 id="modalTitle">Tool</h2>
+
+    <div class="dropzone" id="dropzone">
+      <div>Drag &amp; drop files here, or click to choose</div>
+    </div>
+    <input type="file" id="fileInput" multiple hidden />
+    <ul class="file-list" id="fileList"></ul>
+
+    <div class="options" id="rotateOptions" style="display:none;">
+      <label for="angleSelect">Rotate by</label>
+      <select id="angleSelect">
+        <option value="90">90° clockwise</option>
+        <option value="180">180°</option>
+        <option value="270">270° clockwise (90° counter-clockwise)</option>
+      </select>
+    </div>
+
+    <div class="options" id="compressOptions" style="display:none;">
+      <label for="qualitySelect">Compression level</label>
+      <select id="qualitySelect">
+        <option value="low">Extreme compression (smaller file, lower quality)</option>
+        <option value="recommended" selected>Recommended</option>
+        <option value="high">High quality (larger file)</option>
+      </select>
+    </div>
+
+    <button class="primary-btn" id="runBtn" disabled>Choose files to continue</button>
+    <div class="status" id="statusMsg"></div>
+  </div>
+</div>
+
+<script>
+const TOOLS = {
+  "merge": {
+    title: "Merge PDF",
+    endpoint: "/api/merge",
+    accept: ".pdf",
+    multiple: true,
+    minFiles: 2,
+    fieldName: "files",
+    cta: "Merge PDFs"
+  },
+  "split": {
+    title: "Split PDF",
+    endpoint: "/api/split",
+    accept: ".pdf",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Split PDF"
+  },
+  "compress": {
+    title: "Compress PDF",
+    endpoint: "/api/compress",
+    accept: ".pdf",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Compress PDF",
+    showCompressOptions: true
+  },
+  "rotate": {
+    title: "Rotate PDF",
+    endpoint: "/api/rotate",
+    accept: ".pdf",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Rotate PDF",
+    showRotateOptions: true
+  },
+  "images-to-pdf": {
+    title: "Images to PDF",
+    endpoint: "/api/images-to-pdf",
+    accept: "image/*",
+    multiple: true,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Convert to PDF"
+  },
+  "pdf-to-images": {
+    title: "PDF to Images",
+    endpoint: "/api/pdf-to-images",
+    accept: ".pdf",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Convert to Images"
+  },
+  "pdf-to-text": {
+    title: "PDF to Text",
+    endpoint: "/api/pdf-to-text",
+    accept: ".pdf",
+    multiple: false,
+    minFiles: 1,
+    fieldName: "files",
+    cta: "Extract Text"
+  }
+};
+
+let currentTool = null;
+let selectedFiles = [];
+
+const modalOverlay = document.getElementById("modalOverlay");
+const modalTitle = document.getElementById("modalTitle");
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("fileInput");
+const fileList = document.getElementById("fileList");
+const runBtn = document.getElementById("runBtn");
+const statusMsg = document.getElementById("statusMsg");
+const rotateOptions = document.getElementById("rotateOptions");
+const compressOptions = document.getElementById("compressOptions");
+
+document.querySelectorAll(".card").forEach(card => {
+  card.addEventListener("click", () => openModal(card.dataset.tool));
+});
+
+document.getElementById("closeModal").addEventListener("click", closeModal);
+modalOverlay.addEventListener("click", (e) => {
+  if (e.target === modalOverlay) closeModal();
+});
+
+function openModal(toolKey) {
+  currentTool = TOOLS[toolKey];
+  selectedFiles = [];
+  modalTitle.textContent = currentTool.title;
+  fileInput.multiple = currentTool.multiple;
+  fileInput.accept = currentTool.accept;
+  fileInput.value = "";
+  fileList.innerHTML = "";
+  statusMsg.textContent = "";
+  statusMsg.className = "status";
+  runBtn.textContent = currentTool.cta;
+  runBtn.disabled = true;
+
+  rotateOptions.style.display = currentTool.showRotateOptions ? "block" : "none";
+  compressOptions.style.display = currentTool.showCompressOptions ? "block" : "none";
+
+  modalOverlay.classList.add("open");
+}
+
+function closeModal() {
+  modalOverlay.classList.remove("open");
+  currentTool = null;
+}
+
+dropzone.addEventListener("click", () => fileInput.click());
+dropzone.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  dropzone.classList.add("dragover");
+});
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+dropzone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropzone.classList.remove("dragover");
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener("change", () => handleFiles(fileInput.files));
+
+function handleFiles(fileListObj) {
+  const files = Array.from(fileListObj);
+  selectedFiles = currentTool.multiple ? selectedFiles.concat(files) : files.slice(0, 1);
+  renderFileList();
+}
+
+function renderFileList() {
+  fileList.innerHTML = "";
+  selectedFiles.forEach((f, idx) => {
+    const li = document.createElement("li");
+    const sizeKb = (f.size / 1024).toFixed(0);
+    li.innerHTML = `<span>${f.name} (${sizeKb} KB)</span>`;
+    const removeBtn = document.createElement("span");
+    removeBtn.textContent = "✕";
+    removeBtn.style.cursor = "pointer";
+    removeBtn.style.color = "#c0392b";
+    removeBtn.addEventListener("click", () => {
+      selectedFiles.splice(idx, 1);
+      renderFileList();
+    });
+    li.appendChild(removeBtn);
+    fileList.appendChild(li);
+  });
+
+  const enough = selectedFiles.length >= currentTool.minFiles;
+  runBtn.disabled = !enough;
+  runBtn.textContent = enough
+    ? currentTool.cta
+    : `Add at least ${currentTool.minFiles} file${currentTool.minFiles > 1 ? "s" : ""}`;
+}
+
+runBtn.addEventListener("click", async () => {
+  if (!currentTool || selectedFiles.length < currentTool.minFiles) return;
+
+  runBtn.disabled = true;
+  runBtn.textContent = "Processing…";
+  statusMsg.textContent = "";
+  statusMsg.className = "status";
+
+  const formData = new FormData();
+  selectedFiles.forEach(f => formData.append(currentTool.fieldName, f));
+
+  if (currentTool.showRotateOptions) {
+    formData.append("angle", document.getElementById("angleSelect").value);
+  }
+  if (currentTool.showCompressOptions) {
+    formData.append("quality", document.getElementById("qualitySelect").value);
+  }
+
+  try {
+    const res = await fetch(currentTool.endpoint, {
+      method: "POST",
+      body: formData
+    });
+
+    if (!res.ok) {
+      let msg = "Something went wrong. Please try again.";
+      try {
+        const errJson = await res.json();
+        if (errJson.error) msg = errJson.error;
+      } catch (_) {}
+      throw new Error(msg);
+    }
+
+    const blob = await res.blob();
+    const disposition = res.headers.get("Content-Disposition") || "";
+    let filename = "output";
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    if (match) filename = match[1];
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+
+    statusMsg.textContent = "Done! Your download has started.";
+    statusMsg.className = "status success";
+  } catch (err) {
+    statusMsg.textContent = err.message || "Something went wrong.";
+    statusMsg.className = "status error";
+  } finally {
+    runBtn.disabled = false;
+    runBtn.textContent = currentTool.cta;
+  }
+});
+</script>
+
+</body>
+</html>
