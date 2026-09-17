@@ -1308,6 +1308,232 @@ def image_to_ocr():
 
 
 # ---------------------------------------------------------------------------
+# Redact Text — black out all occurrences of a search string on every page
+# ---------------------------------------------------------------------------
+
+@app.route("/api/redact", methods=["POST"])
+def redact_pdf():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a PDF file."}), 400
+
+    terms_raw = request.form.get("terms", "").strip()
+    if not terms_raw:
+        return jsonify({"error": "Enter at least one word or phrase to redact."}), 400
+
+    # Support multiple terms separated by newlines or commas
+    terms = [t.strip() for t in terms_raw.replace(",", "\n").splitlines() if t.strip()]
+
+    src = files[0]
+    data = src.read()
+    base_name = os.path.splitext(secure_filename(src.filename))[0] or "document"
+
+    with fitz.open(stream=data, filetype="pdf") as doc:
+        total_hits = 0
+        for page in doc:
+            for term in terms:
+                hits = page.search_for(term, quads=True)
+                total_hits += len(hits)
+                for quad in hits:
+                    # Add a redaction annotation then apply it
+                    page.add_redact_annot(quad, fill=(0, 0, 0))
+            page.apply_redactions()
+
+        if total_hits == 0:
+            return jsonify({"error": "No matching text found to redact."}), 400
+
+        out_bytes = doc.tobytes(deflate=True, garbage=4)
+
+    return send_bytes(out_bytes, f"{base_name}_redacted.pdf", "application/pdf")
+
+
+# ---------------------------------------------------------------------------
+# Add Signature — draw a signature onto the PDF using canvas (image upload)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/add-signature", methods=["POST"])
+def add_signature():
+    """
+    Accept a PDF + a signature image (PNG/JPG/WebP).
+    Place the signature image on every page (or a chosen page) at a chosen position.
+    """
+    pdf_file = request.files.get("file") or (request.files.getlist("files") or [None])[0]
+    sig_file = request.files.get("signature")
+
+    if not pdf_file or not pdf_file.filename:
+        return jsonify({"error": "Upload a PDF file."}), 400
+    if not sig_file or not sig_file.filename:
+        return jsonify({"error": "Upload a signature image (PNG or JPG)."}), 400
+
+    position = request.form.get("position", "bottom-right")
+    try:
+        sig_scale = float(request.form.get("scale", 0.20))
+        sig_scale = max(0.05, min(sig_scale, 0.5))
+    except ValueError:
+        sig_scale = 0.20
+
+    page_target = request.form.get("page_target", "last")  # "all", "first", "last", or a 1-based number
+
+    pdf_data = pdf_file.read()
+    sig_data = sig_file.read()
+
+    # Convert signature to PNG with transparency preserved
+    sig_img = Image.open(io.BytesIO(sig_data)).convert("RGBA")
+    sig_buf = io.BytesIO()
+    sig_img.save(sig_buf, format="PNG")
+    sig_png = sig_buf.getvalue()
+
+    base_name = os.path.splitext(secure_filename(pdf_file.filename))[0] or "document"
+
+    with fitz.open(stream=pdf_data, filetype="pdf") as doc:
+        n = len(doc)
+
+        if page_target == "all":
+            target_indices = list(range(n))
+        elif page_target == "first":
+            target_indices = [0]
+        elif page_target == "last":
+            target_indices = [n - 1]
+        else:
+            try:
+                idx = int(page_target) - 1
+                target_indices = [max(0, min(idx, n - 1))]
+            except ValueError:
+                target_indices = [n - 1]
+
+        for i in target_indices:
+            page = doc[i]
+            pw, ph = page.rect.width, page.rect.height
+
+            sig_w = pw * sig_scale
+            # Keep aspect ratio
+            ar = sig_img.height / sig_img.width if sig_img.width else 1
+            sig_h = sig_w * ar
+
+            margin = 20
+            if position == "bottom-right":
+                x0, y0 = pw - sig_w - margin, ph - sig_h - margin
+            elif position == "bottom-left":
+                x0, y0 = margin, ph - sig_h - margin
+            elif position == "bottom-center":
+                x0, y0 = (pw - sig_w) / 2, ph - sig_h - margin
+            elif position == "top-right":
+                x0, y0 = pw - sig_w - margin, margin
+            elif position == "top-left":
+                x0, y0 = margin, margin
+            else:
+                x0, y0 = pw - sig_w - margin, ph - sig_h - margin
+
+            rect = fitz.Rect(x0, y0, x0 + sig_w, y0 + sig_h)
+            page.insert_image(rect, stream=sig_png)
+
+        out_bytes = doc.tobytes(deflate=True, garbage=4)
+
+    return send_bytes(out_bytes, f"{base_name}_signed.pdf", "application/pdf")
+
+
+# ---------------------------------------------------------------------------
+# Flatten PDF — merge all annotations/form fields into static page content
+# ---------------------------------------------------------------------------
+
+@app.route("/api/flatten", methods=["POST"])
+def flatten_pdf():
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload a PDF file."}), 400
+
+    src = files[0]
+    data = src.read()
+    base_name = os.path.splitext(secure_filename(src.filename))[0] or "document"
+
+    with fitz.open(stream=data, filetype="pdf") as doc:
+        # Flatten by rendering each page to a pixmap and rebuilding the PDF.
+        # This merges annotations, form fields, watermarks, overlays into static content.
+        new_doc = fitz.open()
+        zoom = 2.0
+        mat = fitz.Matrix(zoom, zoom)
+        for page in doc:
+            pix = page.get_pixmap(matrix=mat, annots=True)
+            # Create a new blank page matching the original size
+            new_page = new_doc.new_page(width=page.rect.width, height=page.rect.height)
+            # Insert the rasterized content
+            new_page.insert_image(page.rect, stream=pix.tobytes("png"))
+        out_bytes = new_doc.tobytes(deflate=True, garbage=4)
+        new_doc.close()
+
+    return send_bytes(out_bytes, f"{base_name}_flattened.pdf", "application/pdf")
+
+
+# ---------------------------------------------------------------------------
+# HTML → PDF  (converts uploaded .html file to PDF)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/html-to-pdf", methods=["POST"])
+def html_to_pdf():
+    """
+    Convert an HTML file to PDF using PyMuPDF's built-in HTML renderer (Story API).
+    No headless browser needed.
+    """
+    files = get_uploaded_files()
+    if not files:
+        return jsonify({"error": "Upload an HTML file."}), 400
+
+    src = files[0]
+    html_bytes = src.read()
+    base_name = os.path.splitext(secure_filename(src.filename))[0] or "document"
+
+    try:
+        html_text = html_bytes.decode("utf-8", errors="replace")
+    except Exception:
+        html_text = html_bytes.decode("latin-1", errors="replace")
+
+    try:
+        # Use PyMuPDF's Story API (available in PyMuPDF ≥ 1.21)
+        from reportlab.lib.pagesizes import A4
+        story = fitz.Story(html=html_text)
+        buf = io.BytesIO()
+        mediabox = fitz.paper_rect("a4")
+        where = mediabox + (36, 36, -36, -36)  # 36pt margins all round
+
+        writer = fitz.DocumentWriter(buf)
+        more = True
+        while more:
+            device = writer.begin_page(mediabox)
+            more, _ = story.place(where)
+            story.draw(device)
+            writer.end_page()
+        writer.close()
+
+        out_bytes = buf.getvalue()
+    except Exception as e:
+        # Fallback: render the HTML as plain text if Story API fails
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.pagesizes import A4
+        import re
+
+        # Strip HTML tags for a plain-text fallback
+        plain = re.sub(r"<[^>]+>", " ", html_text)
+        plain = re.sub(r"\s+", " ", plain).strip()
+
+        buf = io.BytesIO()
+        pdf_doc = SimpleDocTemplate(buf, pagesize=A4)
+        styles = getSampleStyleSheet()
+        flowables = []
+        for chunk in plain.split("."):
+            chunk = chunk.strip()
+            if chunk:
+                flowables.append(Paragraph(chunk.replace("&", "&amp;").replace("<", "&lt;") + ".", styles["Normal"]))
+                flowables.append(Spacer(1, 6))
+        if not flowables:
+            flowables = [Paragraph("(Empty document)", styles["Normal"])]
+        pdf_doc.build(flowables)
+        out_bytes = buf.getvalue()
+
+    return send_bytes(out_bytes, f"{base_name}.pdf", "application/pdf")
+
+
+# ---------------------------------------------------------------------------
 # Error handlers
 # ---------------------------------------------------------------------------
 
