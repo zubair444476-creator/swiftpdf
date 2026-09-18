@@ -735,13 +735,45 @@ def pdf_to_excel():
 
     wb = Workbook()
     wb.remove(wb.active)
-    hdr_fill = PatternFill("solid", fgColor="2F5496")
-    hdr_font = Font(bold=True, color="FFFFFF", size=10)
     body_font = Font(size=10)
-    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left_align  = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+    right_align = Alignment(horizontal="right",  vertical="center", wrap_text=True)
     thin = Side(border_style="thin", color="B0C4D8")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    def _detect_hdr_color_for_table(page, table_rect):
+        """Read the actual fill colour of the header row from the PDF drawings.
+        Returns (fill_hex, font_hex) — both as 6-char hex strings."""
+        fill_hex = "2F5496"   # fallback: dark blue
+        font_hex = "FFFFFF"   # fallback: white
+        try:
+            rt = table_rect.y0
+            cands = []
+            for d in page.get_drawings():
+                r = d.get("rect")
+                f = d.get("fill")
+                if r is None or not f:
+                    continue
+                # Skip white and black (background / text, not fill)
+                if f in ((1., 1., 1.), (0., 0., 0.)):
+                    continue
+                # Must overlap the top band of the table (header area ≈ first 30 pts)
+                if r.y0 <= rt + 30 and r.y1 >= rt and r.x0 <= table_rect.x1 and r.x1 >= table_rect.x0:
+                    overlap_w = max(0, min(r.x1, table_rect.x1) - max(r.x0, table_rect.x0))
+                    cands.append((overlap_w, f))
+            if cands:
+                _, best = max(cands, key=lambda x: x[0])
+                r_int = int(round(best[0] * 255))
+                g_int = int(round(best[1] * 255))
+                b_int = int(round(best[2] * 255))
+                fill_hex = f"{r_int:02X}{g_int:02X}{b_int:02X}"
+                # Decide font color by luminance (dark bg → white font, light bg → black font)
+                lum = 0.299 * r_int + 0.587 * g_int + 0.114 * b_int
+                font_hex = "FFFFFF" if lum < 160 else "000000"
+        except Exception:
+            pass
+        return fill_hex, font_hex
 
     with fitz.open(stream=data, filetype="pdf") as pdf:
         for pg_idx, page in enumerate(pdf):
@@ -756,18 +788,33 @@ def pdf_to_excel():
                         if not raw:
                             continue
                         ncols = max(len(r) for r in raw)
+                        tbl_rect = fitz.Rect(ft.bbox)
+                        hdr_fill_hex, hdr_font_hex = _detect_hdr_color_for_table(page, tbl_rect)
+                        hdr_fill = PatternFill("solid", fgColor=hdr_fill_hex)
+                        hdr_font = Font(bold=True, color=hdr_font_hex, size=10)
                         start_row = rc
                         for ri, row in enumerate(raw):
                             row = (row + [None] * (ncols - len(row)))[:ncols]
+                            is_hdr = (ri == 0)
                             for ci, val in enumerate(row, start=1):
-                                cell = ws.cell(row=rc, column=ci, value=val if val is not None else "")
+                                cell_text = val if val is not None else ""
+                                cell_text = str(cell_text).strip()
+                                cell = ws.cell(row=rc, column=ci, value=cell_text)
                                 cell.border = border
-                                cell.font = hdr_font if ri == 0 else body_font
-                                cell.alignment = center if ri == 0 else left
-                                if ri == 0:
+                                if is_hdr:
+                                    cell.font = hdr_font
                                     cell.fill = hdr_fill
+                                    cell.alignment = center_align
+                                else:
+                                    cell.font = body_font
+                                    # RTL alignment for Arabic / Hebrew content
+                                    if _is_rtl(cell_text):
+                                        cell.alignment = right_align
+                                    else:
+                                        cell.alignment = left_align
                             rc += 1
-                        rc += 1
+                        rc += 1  # blank separator row between tables
+                        # Auto-size columns
                         for ci in range(1, ncols + 1):
                             cl = get_column_letter(ci)
                             ml = max(
@@ -775,12 +822,13 @@ def pdf_to_excel():
                                  for r in range(start_row, rc - 1)),
                                 default=8,
                             )
-                            ws.column_dimensions[cl].width = min(max(ml + 2, 8), 50)
+                            ws.column_dimensions[cl].width = min(max(ml + 2, 8), 60)
                         wrote = True
             except Exception:
                 wrote = False
 
             if not wrote:
+                # No structured tables detected — fall back to text-block layout
                 try:
                     blocks = page.get_text("dict")["blocks"]
                     spans = []
@@ -791,14 +839,17 @@ def pdf_to_excel():
                             for span in line.get("spans", []):
                                 t = span["text"].strip()
                                 if t:
-                                    spans.append({"text": t, "x0": span["bbox"][0], "y0": span["bbox"][1]})
+                                    spans.append({
+                                        "text": t,
+                                        "x0": span["bbox"][0],
+                                        "y0": span["bbox"][1],
+                                        "rtl": _is_rtl(t),
+                                    })
                     if spans:
                         xs = sorted(set(round(s["x0"]) for s in spans))
-                        gap = 25
-                        clusters = [xs[0]]
                         col_starts = [xs[0]]
                         for x in xs[1:]:
-                            if x - col_starts[-1] > gap:
+                            if x - col_starts[-1] > 25:
                                 col_starts.append(x)
 
                         def col_of(x0, _starts=col_starts):
@@ -811,12 +862,17 @@ def pdf_to_excel():
                             for s in rows_map[yk]:
                                 ci = col_of(s["x0"])
                                 existing = ws.cell(row=rc, column=ci).value or ""
-                                ws.cell(row=rc, column=ci, value=(existing + " " if existing else "") + s["text"])
+                                joined = (existing + " " if existing else "") + s["text"]
+                                cell = ws.cell(row=rc, column=ci, value=joined)
+                                cell.font = body_font
+                                cell.alignment = right_align if s["rtl"] else left_align
                             rc += 1
                     else:
                         for line in page.get_text().split("\n"):
                             if line.strip():
-                                ws.cell(row=rc, column=1, value=line)
+                                cell = ws.cell(row=rc, column=1, value=line)
+                                cell.font = body_font
+                                cell.alignment = right_align if _is_rtl(line) else left_align
                                 rc += 1
                 except Exception:
                     for line in page.get_text().split("\n"):
@@ -1136,10 +1192,47 @@ def excel_to_pdf():
         return jsonify({"error": "Upload a .xlsx file."}), 400
     src = files[0]
     base = os.path.splitext(secure_filename(src.filename))[0] or "spreadsheet"
-    out_bytes, err = _lo_to_pdf(src, ".xlsx", base)
+    out_bytes, err = _lo_to_pdf_excel(src, base)
     if err:
         return jsonify({"error": err}), 503
     return send_bytes(out_bytes, f"{base}.pdf", "application/pdf")
+
+
+def _lo_to_pdf_excel(file_obj, base_name):
+    """Convert xlsx to PDF via LibreOffice with fit-to-page (1 page width) to prevent
+    spurious extra pages caused by LibreOffice's default print scaling."""
+    import openpyxl as _openpyxl
+    from openpyxl.worksheet.page import PageSetup as _PageSetup
+
+    tmp = tempfile.mkdtemp()
+    try:
+        src = os.path.join(tmp, f"{base_name}.xlsx")
+        data = file_obj.read()
+        # Patch every sheet: set fitToPage=True, fitToWidth=1, fitToHeight=0
+        # so LibreOffice respects the "fit all columns to 1 page" instruction.
+        try:
+            wb = _openpyxl.load_workbook(io.BytesIO(data))
+            for ws in wb.worksheets:
+                ws.sheet_properties.pageSetUpPr.fitToPage = True
+                ws.page_setup.fitToWidth = 1
+                ws.page_setup.fitToHeight = 0
+                ws.page_setup.scale = None  # clear any scale override
+            patched = io.BytesIO()
+            wb.save(patched)
+            data = patched.getvalue()
+        except Exception:
+            pass  # if patching fails, fall through with original data
+
+        with open(src, "wb") as f:
+            f.write(data)
+        try:
+            out = _libreoffice_convert(src, tmp, "pdf")
+        except RuntimeError as e:
+            return None, str(e)
+        with open(out, "rb") as f:
+            return f.read(), None
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 # ===========================================================================
@@ -1213,6 +1306,16 @@ def _ocr(pil_img, lang="eng"):
 
 @app.route("/api/image-to-ocr", methods=["POST"])
 def image_to_ocr():
+    """Convert image(s) to Word (.docx) or plain text (.txt).
+
+    Word output strategy:
+    - Each image is embedded full-page in the Word document at its original
+      aspect ratio so the visual layout is preserved 1-to-1.
+    - OCR text is also extracted and placed BELOW the image so the document
+      is both visually accurate AND searchable/copy-pasteable.
+    - This is far superior to a bare text dump because tables, logos, stamps,
+      signatures and all graphical elements are retained exactly as they appear.
+    """
     files = get_uploaded_files()
     if not files:
         return jsonify({"error": "Upload one or more image files."}), 400
@@ -1221,7 +1324,7 @@ def image_to_ocr():
     if not re.match(r"^[a-zA-Z+]{2,20}$", lang):
         lang = "eng"
 
-    page_texts = []
+    page_data = []   # list of (name, pil_img, ocr_text)
     for f in files:
         name = os.path.splitext(secure_filename(f.filename))[0] or "image"
         try:
@@ -1232,47 +1335,103 @@ def image_to_ocr():
                 img = bg
             elif img.mode not in ("RGB", "L"):
                 img = img.convert("RGB")
-            page_texts.append((name, _ocr(img, lang=lang)))
-        except RuntimeError as e:
-            return jsonify({"error": str(e)}), 503
+            try:
+                ocr_text = _ocr(img, lang=lang)
+            except RuntimeError as e:
+                return jsonify({"error": str(e)}), 503
+            except Exception as e:
+                ocr_text = f"[OCR failed: {e}]"
+            page_data.append((name, img, ocr_text))
         except Exception as e:
-            page_texts.append((name, f"[Could not read this image: {e}]"))
+            return jsonify({"error": f"Could not read image '{name}': {e}"}), 400
 
-    if not page_texts:
+    if not page_data:
         return jsonify({"error": "No images could be processed."}), 400
-    base = page_texts[0][0] or "ocr_result"
+    base = page_data[0][0] or "ocr_result"
 
+    # ── Plain text output ────────────────────────────────────────────────────
     if fmt == "txt":
         parts = []
-        for name, text in page_texts:
-            if len(page_texts) > 1:
+        for name, _img, text in page_data:
+            if len(page_data) > 1:
                 parts.append(f"=== {name} ===")
             parts.append(text.strip())
             parts.append("")
-        return send_bytes("\n".join(parts).strip().encode("utf-8"), f"{base}_ocr.txt", "text/plain; charset=utf-8")
+        return send_bytes(
+            "\n".join(parts).strip().encode("utf-8"),
+            f"{base}_ocr.txt",
+            "text/plain; charset=utf-8",
+        )
+
+    # ── Word output: image-first, then searchable OCR text ──────────────────
+    # Page size: A4 in centimetres
+    PAGE_W_CM = 21.0
+    PAGE_H_CM = 29.7
+    MARGIN_CM = 1.5
+    USABLE_W_CM = PAGE_W_CM - 2 * MARGIN_CM   # 18 cm
 
     doc = Document()
     for section in doc.sections:
-        section.page_width = Cm(21)
-        section.page_height = Cm(29.7)
-        section.left_margin = Cm(2.0)
-        section.right_margin = Cm(2.0)
-        section.top_margin = Cm(2.0)
-        section.bottom_margin = Cm(2.0)
-    for idx, (name, text) in enumerate(page_texts):
+        section.page_width = Cm(PAGE_W_CM)
+        section.page_height = Cm(PAGE_H_CM)
+        section.left_margin = Cm(MARGIN_CM)
+        section.right_margin = Cm(MARGIN_CM)
+        section.top_margin = Cm(MARGIN_CM)
+        section.bottom_margin = Cm(MARGIN_CM)
+
+    for idx, (name, pil_img, ocr_text) in enumerate(page_data):
         if idx > 0:
             doc.add_page_break()
-        if len(page_texts) > 1:
-            doc.add_paragraph(style="Heading 1").add_run(name)
-        for line in text.splitlines():
-            p = doc.add_paragraph()
-            run = p.add_run(line)
-            run.font.size = Pt(10)
+
+        # ── 1. Embed the original image at full usable width ─────────────────
+        img_buf = io.BytesIO()
+        pil_img.save(img_buf, format="PNG")
+        img_buf.seek(0)
+
+        # Compute display height to preserve aspect ratio
+        img_w_px, img_h_px = pil_img.size
+        aspect = img_h_px / img_w_px if img_w_px else 1.0
+        display_h_cm = USABLE_W_CM * aspect
+        # Cap at usable page height so a single image never bleeds off the page
+        max_h_cm = PAGE_H_CM - 2 * MARGIN_CM - 1.0  # leave 1 cm for text below
+        display_h_cm = min(display_h_cm, max_h_cm)
+
+        img_para = doc.add_paragraph()
+        img_para.paragraph_format.space_before = Pt(0)
+        img_para.paragraph_format.space_after = Pt(4)
+        img_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = img_para.add_run()
+        run.add_picture(img_buf, width=Cm(USABLE_W_CM), height=Cm(display_h_cm))
+
+        # ── 2. OCR text below — small, muted, acts as searchable layer ───────
+        lines = [l for l in ocr_text.splitlines() if l.strip()]
+        if lines:
+            sep = doc.add_paragraph()
+            sep.paragraph_format.space_before = Pt(2)
+            sep.paragraph_format.space_after = Pt(2)
+            sep_run = sep.add_run("── Extracted Text ──")
+            sep_run.font.size = Pt(7)
+            sep_run.font.color.rgb = RGBColor(150, 150, 150)
+            sep.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            for line in lines:
+                is_rtl = _is_rtl(line)
+                p = doc.add_paragraph()
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after = Pt(1)
+                if is_rtl:
+                    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                    p._p.get_or_add_pPr().append(OxmlElement("w:bidi"))
+                r = p.add_run(line)
+                r.font.size = Pt(8)
+                r.font.color.rgb = RGBColor(60, 60, 60)
+
     buf = io.BytesIO()
     doc.save(buf)
     buf.seek(0)
     return send_bytes(
-        buf.getvalue(), f"{base}_ocr.docx",
+        buf.getvalue(),
+        f"{base}_ocr.docx",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
 

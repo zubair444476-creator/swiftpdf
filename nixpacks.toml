@@ -13,5 +13,11 @@ aptPkgs = [
   "libreoffice-calc",
   "fonts-liberation",
   "fonts-dejavu",
-  "libgl1"
+  "fonts-noto",
+  "fonts-noto-core",
+  "fonts-noto-extra",
+  "fonts-noto-ui-core",
+  "fonts-arabeyes",
+  "libgl1",
+  "fontconfig"
 ]
